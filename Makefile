@@ -20,4 +20,4 @@ deps:
 	opam install menhir
 
 run: build
-	./_build/default/bin/compiler.exe test.perk
+	./_build/default/bin/compiler.exe test/test.perk
