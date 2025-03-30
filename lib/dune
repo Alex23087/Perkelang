@@ -1,0 +1,10 @@
+(library
+ (name Perkelang)
+ (libraries sedlex menhirLib)
+ (preprocess
+  (pps ppx_deriving.show sedlex.ppx)))
+
+(menhir
+ (modules parser)
+ (explain true)
+ (flags --dump))

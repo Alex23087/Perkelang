@@ -1,0 +1,17 @@
+BEGIN_C
+#include <stdio.h>
+#include <stdlib.h>
+char* str = "%d\n";
+END_C;
+
+// (uint8_t -> culo_t) banana = (int x):void => {skip};
+
+// (culo_t -> (pisnelo_t * palle_t) -> void) banaba = ():void => {skip};
+
+(int * int) -> int sum = (int a, int b): int => {
+    return a + b
+};
+
+fun main(): int {
+    printf(str, (sum(10, 59)))
+}

@@ -1,0 +1,5 @@
+(executable
+ (name compiler)
+ (public_name Perkelang)
+ (libraries Perkelang menhirLib)
+ (flags (:standard -g)))
