@@ -6,7 +6,8 @@ let fresh_var (): string =
   fresh_var_counter := v + 1;
   Printf.sprintf "__perkelang_lambda_%d" v
 
-let rec type_descriptor_of_perktype (t: perktype) : string =
+let rec type_descriptor_of_perktype (t: perktype_complete) : string =
+  let _, t, _ = t in
   match t with
   | Basetype s -> s
   | Funtype (args, ret) ->
@@ -16,14 +17,15 @@ let rec type_descriptor_of_perktype (t: perktype) : string =
   | Arraytype (t, _) -> Printf.sprintf "%s_arr" (type_descriptor_of_perktype t)
   | Classtype s -> s
 
-let function_type_hashmap: (perktype, (string * string)) Hashtbl.t = Hashtbl.create 10
+let function_type_hashmap: (perktype_complete, (string * string)) Hashtbl.t = Hashtbl.create 10
 let lambdas_hashmap: (expr, (string * string)) Hashtbl.t = Hashtbl.create 10
-let symbol_table: (perkident, perktype) Hashtbl.t = Hashtbl.create 10
+let symbol_table: (perkident, perktype_complete) Hashtbl.t = Hashtbl.create 10
 
-let rec get_function_type (t: perktype) : (string * string) =
+let rec get_function_type (t: perktype_complete) : (string * string) =
   try Hashtbl.find function_type_hashmap t
   with Not_found ->
-    match t with
+    let _, t', _ = t in (*TODO: Implement type attribs and qualifiers*)
+    match t' with
     | Funtype (args, ret) -> (
       let type_str = type_descriptor_of_perktype t in
       let typedef_str = Printf.sprintf "typedef %s"
@@ -43,7 +45,7 @@ and get_lambda (e: expr) : (string * string) =
       let type_str = codegen_type retype in
       let args_str = String.concat ", " (List.map (fun (t, id) -> Printf.sprintf "%s %s" (codegen_type t) id) args) in
       let body_str = codegen_command body 1 in
-      let funtype  = Funtype (List.map (fun (t, _) -> t) args, retype) in
+      let funtype  = ([Static], Funtype (List.map (fun (t, _) -> t) args, retype), []) in
       put_symbol id funtype;
       Printf.sprintf "%s %s(%s) {\n%s\n}" type_str id args_str body_str
     )
@@ -52,7 +54,7 @@ and get_lambda (e: expr) : (string * string) =
     Hashtbl.add lambdas_hashmap e (id, compiled);
     id, compiled
 
-and put_symbol (ident: perkident) (typ: perktype): unit =
+and put_symbol (ident: perkident) (typ: perktype_complete): unit =
   try let _ = Hashtbl.find symbol_table ident in ()
   with Not_found ->
     Hashtbl.add symbol_table ident typ
@@ -71,7 +73,7 @@ and codegen_program (cmd: command) : string =
   ^ "\n" ^
   (* Write lambdas *)
   Hashtbl.fold (fun _ v acc ->
-    Printf.sprintf "%sstatic %s;\n" acc (snd v)
+    Printf.sprintf "%s%s;\n" acc (snd v)
   ) lambdas_hashmap ""
   ^ "\n" ^ body ^ ";"
 
@@ -105,23 +107,49 @@ and codegen_def (t: perkvardesc) (e: expr) : string =
   let expr_str = codegen_expr e in
   Printf.sprintf "%s %s = %s;" type_str id expr_str
 
-and codegen_fundef (t: perktype) (id: perkident) (args: perkvardesc list) (body: command) : string =
+and codegen_fundef (t: perktype_complete) (id: perkident) (args: perkvardesc list) (body: command) : string =
   let type_str = codegen_type t in
   let args_str = String.concat ", " (List.map (fun (t, id) -> Printf.sprintf "%s %s" (codegen_type t) id) args) in
   let body_str = codegen_command body 1 in
-  let funtype  = Funtype (List.map (fun (t, _) -> t) args, t) in
+  let funtype  = ([], Funtype (List.map (fun (t, _) -> t) args, t), []) in
   put_symbol id funtype;
   Printf.sprintf "%s %s(%s) {\n%s\n}" type_str id args_str body_str
 
-and codegen_type (t: perktype) : string =
-  match t with
+and codegen_type (t: perktype_complete) : string =
+  let attrs, t', quals = t in
+  let attrs_str = String.concat " " (List.map codegen_attr attrs) in
+  let quals_str = String.concat " " (List.map codegen_qual quals) in
+  let type_str = (
+  match t' with
   | Basetype s -> s
   | Funtype _ ->
       t |> get_function_type |> fst
   | Pointertype t -> Printf.sprintf "%s*" (codegen_type t)
   | Arraytype (t, Some n) -> Printf.sprintf "%s[%d]" (codegen_type t) n
   | Arraytype (t, None) -> Printf.sprintf "%s[]" (codegen_type t)
-  | Classtype s -> s
+  | Classtype s -> s)
+  in
+  if attrs_str = "" && quals_str = "" then
+    type_str
+  else if attrs_str = "" then
+    Printf.sprintf "%s %s" quals_str type_str
+  else if quals_str = "" then
+    Printf.sprintf "%s %s" attrs_str type_str
+  else
+    Printf.sprintf "%s %s %s" attrs_str quals_str type_str
+
+and codegen_attr (attr: perktype_attribute) : string =
+  match attr with
+  | Public -> "public"
+  | Private -> "private"
+  | Static -> "static"
+  | Extern -> "extern"
+
+and codegen_qual (qual: perktype_qualifier) : string =
+  match qual with
+  | Const -> "const"
+  | Volatile -> "volatile"
+  | Restrict -> "restrict"
 
 and codegen_expr (e: expr) : string =
   match e with
@@ -160,7 +188,15 @@ and codegen_unop (op: unop) : string =
   | Neg -> "-"
   | Not -> "!"
 
-and codegen_fundecl (id: perkident) (typ: perktype): string =
-  match typ with
+and codegen_fundecl (id: perkident) (typ: perktype_complete): string =
+  let attrs, t, _ = typ in
+  let attrs_str = String.concat " " (List.map codegen_attr attrs) in
+  let type_str = (
+  match t with
   | Funtype (args, ret) -> (codegen_type ret) ^ " " ^ id ^ " (" ^ (String.concat ", " (List.map codegen_type args)) ^ ")"
   | _ -> failwith "codegen_fundecl: called with a non function type"
+  ) in
+  if attrs_str = "" then
+    type_str
+  else
+    Printf.sprintf "%s %s" attrs_str type_str

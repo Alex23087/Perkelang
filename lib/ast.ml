@@ -1,11 +1,27 @@
 type perkident = string
 [@@deriving show]
 
-(* type of the perk -- giangpt *)
-type perktype = Basetype of string | Funtype of (perktype list) * perktype | Pointertype of perktype | Arraytype of perktype * (int option) | Classtype of string
+type perktype_attribute =
+  | Public
+  | Private
+  | Static
+  | Extern
 [@@deriving show]
 
-type perkvardesc = perktype * perkident
+type perktype_qualifier =
+  | Const
+  | Volatile
+  | Restrict
+[@@deriving show]
+
+(* type of the perk -- giangpt *)
+type perktype = Basetype of string | Funtype of (perktype_complete list) * perktype_complete | Pointertype of perktype_complete | Arraytype of perktype_complete * (int option) | Classtype of string
+[@@deriving show]
+
+and perktype_complete = perktype_attribute list * perktype * perktype_qualifier list
+[@@deriving show]
+
+type perkvardesc = perktype_complete * perkident
 [@@deriving show]
 
 type perkdecl = perkvardesc
@@ -29,7 +45,7 @@ type unop = Neg | Not (*....*) [@@deriving show]
 type perkdef = perkdecl * expr [@@deriving show]
   
 (* return, name, args, body *)
-and perkfun = Fun of perktype * perkident * (perkvardesc list) * command [@@deriving show]
+and perkfun = Fun of perktype_complete * perkident * (perkvardesc list) * command [@@deriving show]
 
 (* name, attributes, methods *)
 (* and perklass = Class of perkident * (perkdef list) * (perkfun list) [@@deriving show] *)
@@ -43,7 +59,7 @@ and expr =
   | Apply of expr * (expr list)
   | Binop of binop * expr * expr
   | Unop of unop * expr
-  | Lambda of perktype * (perkvardesc list) * command
+  | Lambda of perktype_complete * (perkvardesc list) * command
   [@@deriving show]
   
 (* Syntax of the language *)

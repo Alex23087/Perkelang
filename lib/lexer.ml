@@ -38,6 +38,13 @@ let rec token lexbuf =
   | "continue"      -> Continue *)
   | "skip"          -> Skip
   | "let"           -> Let
+  | "public"        -> Public
+  | "private"       -> Private
+  | "static"        -> Static
+  | "extern"        -> Extern
+  | "const"         -> Const
+  | "volatile"      -> Volatile
+  | "restrict"      -> Restrict
   | "->"            -> Arrow
   | "=>"            -> Bigarrow
   | identifier      -> Ident (Sedlexing.Latin1.lexeme lexbuf)

@@ -8,6 +8,8 @@
 %token Comma Semicolon Colon LParen RParen LBrace RBrace LBracket RBracket Bang
 %token Arrow Bigarrow
 %token Skip Return Let
+%token Public Private Static Extern
+%token Const Volatile Restrict
 %token <string> InlineC
 
 /* Precedence and associativity specification */
@@ -23,13 +25,14 @@
 %type <Ast.perkdef> perkdef
 %type <Ast.perkvardesc> perkvardesc
 %type <Ast.perkfun> perkfun
+%type <Ast.perktype_complete> perktype_complete
 %type <Ast.perktype> perktype
 %type <Ast.perktype> perkfuntype
 %type <Ast.binop> binop
 %type <Ast.unop> unop
 %type <Ast.expr> expr
 %type <Ast.perkident list> ident_list
-%type <Ast.perktype list> perktype_list
+%type <Ast.perktype_complete list> perktype_list
 
 %%
 
@@ -58,34 +61,48 @@ perkdef:
   | Let vd = perkvardesc Assign e = expr                                                                   { (vd, e) }
 
 perkfun:
-  | i = Ident LParen id_list = perkvardesc_list RParen Colon rt = perktype LBrace c = command RBrace       { Ast.Fun (rt, i, id_list, c) }
-  | i = Ident LParen RParen Colon rt = perktype LBrace c = command RBrace                                  { Ast.Fun (rt, i, [], c) }
+  | i = Ident LParen id_list = perkvardesc_list RParen Colon rt = perktype_complete LBrace c = command RBrace       { Ast.Fun (rt, i, id_list, c) }
+  | i = Ident LParen RParen Colon rt = perktype_complete LBrace c = command RBrace                                  { Ast.Fun (rt, i, [], c) }
 
 perkvardesc:
-  | i = Ident Colon t = perktype                                                                           { (t, i) }
+  | i = Ident Colon t = perktype_complete                                                                  { (t, i) }
   
-perkfuntype:
-  | t1 = perktype Arrow t2 = perktype                                                                      { Ast.Funtype ([t1], t2) }
-  | LParen tl = perktype_list RParen Arrow tf = perktype                                                   { Ast.Funtype (tl, tf) }
+%inline perkfuntype:
+  | t1 = perktype_complete Arrow t2 = perktype_complete                                                    { Ast.Funtype ([t1], t2) }
+  | LParen tl = perktype_list RParen Arrow tf = perktype_complete                                          { Ast.Funtype (tl, tf) }
 
 expr:
   | Star e = expr                                                                                          { Ast.Pointer e }
   | e1 = expr LParen args = separated_list(Comma, expr) RParen                                             { Ast.Apply (e1, args) }
   | e1 = expr b = binop e2 = expr                                                                          { Ast.Binop (b, e1, e2) }
   | u = unop e = expr Comma                                                                                { Ast.Unop (u, e) }
-  | LParen id_list = perkvardesc_list RParen Colon ret = perktype Bigarrow LBrace c = command RBrace       { Ast.Lambda (ret, id_list, c) }
-  | LParen RParen Colon ret = perktype Bigarrow LBrace c = command RBrace                                  { Ast.Lambda (ret, [], c) }
+  | LParen id_list = perkvardesc_list RParen Colon ret = perktype_complete Bigarrow LBrace c = command RBrace       { Ast.Lambda (ret, id_list, c) }
+  | LParen RParen Colon ret = perktype_complete Bigarrow LBrace c = command RBrace                                  { Ast.Lambda (ret, [], c) }
   | n = Number                                                                                             { Ast.Int (n) }
   | i = Ident                                                                                              { Ast.Var(i) }
   | LParen e = expr RParen                                                                                 { e }
 
+%inline perktype_attribute:
+  | Public                                                                                                 { Ast.Public }
+  | Private                                                                                                { Ast.Private }
+  | Static                                                                                                 { Ast.Static }
+  | Extern                                                                                                 { Ast.Extern }
+
+%inline perktype_qualifier:
+  | Const                                                                                                  { Ast.Const }
+  | Volatile                                                                                               { Ast.Volatile }
+  | Restrict                                                                                               { Ast.Restrict }
+
+perktype_complete:
+  | t = perktype q = list(perktype_qualifier)                            { ([], t, q) }
+  | t = perkfuntype q = list(perktype_qualifier)                         { ([], t, q) }
+  | LParen t = perktype_complete RParen                                                                             { t }      
+
 perktype:
-  | LParen t = perktype RParen                                                                             { t }      
   | i = Ident                                                                                              { Ast.Basetype i }
-  | LBracket t = perktype RBracket                                                                         { Ast.Arraytype (t, None) }
-  | LBracket t = perktype n = Number RBracket                                                              { Ast.Arraytype (t, Some n) }
-  | t = perktype Star                                                                                      { Ast.Pointertype t }
-  | t = perkfuntype                                                                                        { t }
+  | LBracket t = perktype_complete RBracket                                                                         { Ast.Arraytype (t, None) }
+  | LBracket t = perktype_complete n = Number RBracket                                                              { Ast.Arraytype (t, Some n) }
+  // | t = perktype_complete Star                                                                                      { Ast.Pointertype t }
 
 %inline binop:
   | Plus                                                                                                   { Ast.Add }
@@ -110,8 +127,8 @@ ident_list:
   | il = ident_list Comma i = Ident { il @ [i] }
 
 perktype_list:
-  | t = perktype { [t] }
-  | tl = perktype Star t = perktype_list { tl :: t }
+  | t = perktype_complete { [t] }
+  | tl = perktype_complete Star t = perktype_list { tl :: t }
 
 perkvardesc_list:
   | t = perkvardesc { [t] }
