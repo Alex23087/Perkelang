@@ -73,6 +73,8 @@ let rec token lexbuf =
   | "open"          -> Open
   | "true"          -> Number 1
   | "false"         -> Number 0
+  | "archetype" | "theory" | "interface" | "prototype" | "trait" | "typeclass" -> Archetype  (* TODO reinvent the wheel*)
+  | "model" | "impl" | "class"     -> Model
   | "->"            -> Arrow
   | "=>"            -> Bigarrow
   | identifier      -> Ident (Sedlexing.Latin1.lexeme lexbuf)

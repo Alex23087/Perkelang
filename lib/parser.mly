@@ -18,6 +18,7 @@
 %token Const Volatile Restrict
 %token <string> InlineC
 %token Import Open
+%token Archetype Model
 
 /* Precedence and associativity specification */
 %left Plus Minus
@@ -69,6 +70,11 @@ command:
   | c1 = command Semicolon                                                                                 { c1 }
   | Skip                                                                                                   { Ast.Skip }
   | Return e = expr                                                                                        { Ast.Return (e) }
+
+  | Archetype i = Ident LBrace l = perkvardesc_list RBrace                                                 { Ast.Archetype (i, l) }
+  | Model i = Ident Colon il = ident_list LBrace l = perkdef_list RBrace                                   { Ast.Model (i, il, l) }
+
+
   | error                                                                                                  { raise (ParseError("command expected")) }
   | command error                                                                                          { raise (ParseError("unexpected command (perhaps you are missing a ';'?)")) }
   | For LParen command Semicolon expr Semicolon command RParen error                                       { raise (ParseError("missing braces after for guard"))}
@@ -168,16 +174,25 @@ ident_list:
   | i = Ident { [i] }
   | il = ident_list Comma i = Ident { il @ [i] }
   | error { raise (ParseError("identifier expected")) }
+  | Ident error { raise (ParseError("unexpected identifier")) }
 
 perktype_list:
   | t = perktype_complete { [t] }
   | tl = perktype_complete Star t = perktype_list { tl :: t }
   | error { raise (ParseError("type expected")) }
+  | perktype_complete error { raise (ParseError("unexpected type")) }
+
+perkdef_list:
+  | t = perkdef { [t] }
+  | tl = perkdef Comma t = perkdef_list { tl :: t }
+  | error { raise (ParseError("definition expected")) }
+  | perkdef error { raise (ParseError("unexpected definition")) }
 
 perkvardesc_list:
   | t = perkvardesc { [t] }
-  | tl = perkvardesc_list Comma t = perkvardesc { tl @ [t] }
+  | tl = perkvardesc Comma t = perkvardesc_list { tl :: t }
   | error { raise (ParseError("variable descriptor expected")) }
+  | perkvardesc error { raise (ParseError("unexpected variable descriptor")) }
 
 spanish_inquisition:
   | error { raise (ParseError("Nobody expects the Spanish Inquisition!")) }

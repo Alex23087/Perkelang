@@ -3,6 +3,23 @@ import "stdlib.h";
 import "malloc.h";
 import "stdint.h";
 
+
+archetype Superbanana {
+    super_palle : int,
+    add: int -> int
+};
+
+archetype Superpera {
+    super_palle : int
+};
+
+model Bnanana: Superbanana, Superpera {
+    let super_palle: int = 0,
+    let altracosa : int = 0,
+
+    let add: int -> int = (x: int): int => {x + 5}
+};
+
 let counter: int = 0;
 let increase: uint8_t -> void = (i: uint8_t): void => {
     counter = (4 + 3) * 2;

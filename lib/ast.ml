@@ -86,5 +86,7 @@ and command =
   | Expr of expr
   | Switch of expr * (expr * command) list
   | Skip
+  | Archetype of perkident * perkdecl list
+  | Model of perkident * perkident list * perkdef list
   | Return of expr
   [@@deriving show]
