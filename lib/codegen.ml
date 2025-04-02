@@ -1,5 +1,9 @@
 open Ast
 
+let fst_3 (x, _, _) = x
+let snd_3 (_, x, _) = x
+let thrd_3 (_, _, x) = x
+
 let fresh_var_counter = ref 0
 let fresh_var (): string =
   let v = !fresh_var_counter in
@@ -17,11 +21,11 @@ let rec type_descriptor_of_perktype (t: perktype_complete) : string =
   | Arraytype (t, _) -> Printf.sprintf "%s_arr" (type_descriptor_of_perktype t)
   | Classtype s -> s
 
-let function_type_hashmap: (perktype_complete, (string * string)) Hashtbl.t = Hashtbl.create 10
+let function_type_hashmap: (perktype_complete, (string * string * string)) Hashtbl.t = Hashtbl.create 10
 let lambdas_hashmap: (expr, (string * string)) Hashtbl.t = Hashtbl.create 10
 let symbol_table: (perkident, perktype_complete) Hashtbl.t = Hashtbl.create 10
 
-let rec get_function_type (t: perktype_complete) : (string * string) =
+let rec get_function_type (t: perktype_complete) : (string * string * string) =
   try Hashtbl.find function_type_hashmap t
   with Not_found ->
     let _, t', _ = t in (*TODO: Implement type attribs and qualifiers*)
@@ -30,9 +34,12 @@ let rec get_function_type (t: perktype_complete) : (string * string) =
       let type_str = type_descriptor_of_perktype t in
       let typedef_str = Printf.sprintf "typedef %s"
         ((codegen_type ret) ^ " (*" ^ type_str ^ ")(" ^
-        (String.concat ", " (List.map (fun t -> (codegen_type t)) args)) ^ ")") in
-      Hashtbl.add function_type_hashmap t (type_str, typedef_str);
-      type_str, typedef_str
+        (String.concat ", " (List.map (fun t -> (codegen_type t ~expand:true)) args)) ^ ")") in
+      let expanded_str = Printf.sprintf "%s"
+        ((codegen_type ret) ^ " (*)(" ^
+        (String.concat ", " (List.map (fun t -> (codegen_type t ~expand:false)) args)) ^ ")") in
+      Hashtbl.add function_type_hashmap t (type_str, typedef_str, expanded_str);
+      type_str, typedef_str, expanded_str
     )
     | _ -> failwith "get_function_type: not a function type"
 
@@ -63,7 +70,7 @@ and codegen_program (cmd: command) : string =
   let body = codegen_command cmd 0 in
   (* Write typedefs *)
   Hashtbl.fold (fun _ v acc ->
-    Printf.sprintf "%s%s;\n" acc (snd v)
+    Printf.sprintf "%s%s;\n" acc (snd_3 v)
   ) function_type_hashmap ""
   ^ "\n" ^
   (* Write hoisted function signatures *)
@@ -71,11 +78,12 @@ and codegen_program (cmd: command) : string =
     Printf.sprintf "%s%s;\n" acc (codegen_fundecl id typ)
   ) symbol_table ""
   ^ "\n" ^
+  body
+  ^ "\n" ^
   (* Write lambdas *)
   Hashtbl.fold (fun _ v acc ->
-    Printf.sprintf "%s%s;\n" acc (snd v)
+    Printf.sprintf "%s\n%s\n" acc (snd v)
   ) lambdas_hashmap ""
-  ^ "\n" ^ body
 
 and codegen_command (cmd: command) (indentation: int) : string =
   let indent_string = String.make (4 * indentation) ' ' in
@@ -92,8 +100,13 @@ and codegen_command (cmd: command) (indentation: int) : string =
     indent_string ^ Printf.sprintf "while (%s) {\n%s\n%s}" (codegen_expr e) (codegen_command c (indentation + 1)) indent_string
   | Dowhile (e, c) ->
     indent_string ^ Printf.sprintf "do {\n%s\n%s} while (%s);" (codegen_command c (indentation + 1)) indent_string (codegen_expr e)
-  | For (e1, e2, c1, c2) ->
-    indent_string ^ Printf.sprintf "for (%s; %s; %s) {\n%s\n%s}" (codegen_expr e1) (codegen_expr e2) (codegen_command c1 0) (codegen_command c2 (indentation + 1)) indent_string
+  | For (c1, e2, c3, body) -> (
+    let c1_code = (codegen_command c1 0) in
+    let c1_code = if String.ends_with c1_code ~suffix:";" then String.sub c1_code 0 (String.length c1_code - 1) else c1_code in
+    let c3_code = (codegen_command c3 0) in
+    let c3_code = if String.ends_with c3_code ~suffix:";" then String.sub c3_code 0 (String.length c3_code - 1) else c3_code in
+    indent_string ^ Printf.sprintf "for (%s; %s; %s) {\n%s\n%s}" c1_code (codegen_expr e2) c3_code (codegen_command body (indentation + 1)) indent_string
+  )
   | Expr e -> indent_string ^ Printf.sprintf "%s;" (codegen_expr e)
   | Skip -> "" (*TODO: Should this be ; ?*)
   | Switch (e, cases) ->
@@ -115,7 +128,7 @@ and codegen_fundef (t: perktype_complete) (id: perkident) (args: perkvardesc lis
   put_symbol id funtype;
   Printf.sprintf "%s %s(%s) {\n%s\n}" type_str id args_str body_str
 
-and codegen_type (t: perktype_complete) : string =
+and codegen_type ?(expand: bool = false) (t: perktype_complete) : string =
   let attrs, t', quals = t in
   let attrs_str = String.concat " " (List.map codegen_attr attrs) in
   let quals_str = String.concat " " (List.map codegen_qual quals) in
@@ -123,10 +136,10 @@ and codegen_type (t: perktype_complete) : string =
   match t' with
   | Basetype s -> s
   | Funtype _ ->
-      t |> get_function_type |> fst
-  | Pointertype t -> Printf.sprintf "%s*" (codegen_type t)
-  | Arraytype (t, Some n) -> Printf.sprintf "%s[%d]" (codegen_type t) n
-  | Arraytype (t, None) -> Printf.sprintf "%s[]" (codegen_type t)
+      t |> get_function_type |> (if expand then thrd_3 else fst_3)
+  | Pointertype t -> Printf.sprintf "%s*" (codegen_type t ~expand)
+  | Arraytype (t, Some n) -> Printf.sprintf "%s[%d]" (codegen_type t ~expand) n
+  | Arraytype (t, None) -> Printf.sprintf "%s[]" (codegen_type t ~expand)
   | Classtype s -> s)
   in
   if attrs_str = "" && quals_str = "" then
@@ -154,6 +167,8 @@ and codegen_qual (qual: perktype_qualifier) : string =
 and codegen_expr (e: expr) : string =
   match e with
   | Int i -> string_of_int i
+  | Char c -> Printf.sprintf "'%c'" c
+  | String s -> Printf.sprintf "\"%s\"" (String.escaped s)
   | Pointer e -> (
     let code = codegen_expr e in
     Printf.sprintf "*%s" code

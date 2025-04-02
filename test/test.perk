@@ -4,7 +4,12 @@ BEGIN_C
 #include <malloc.h>
 END_C;
 
-fun map (f : int -> int,n : int, A : int*): int* {
+let counter: int = 0;
+let increase: uint8_t -> void = (uint8_t i): void => {
+    counter = counter + i;
+};
+
+let map : (((int -> int) * int * int*) -> int*) = (f : int -> int, n : int, A : int*): int* => {
     let res : int* = malloc(n * 4);
     
     let i : int = 0;
@@ -32,8 +37,14 @@ fun main(): int {
     
     let B : int* = map(square, 10, A);
     
-    BEGIN_C
-    for (int i = 0; i < 10; i++)
+    // BEGIN_C
+    // for (int i = 0; i < 10; i++)
+    //     printf("%d\t%d\n", A[i], B[i]);
+    // END_C
+
+    for (let i: int = 0; i < 10; i = i+1) {
+        BEGIN_C
         printf("%d\t%d\n", A[i], B[i]);
-    END_C
+        END_C
+    };
 }

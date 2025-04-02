@@ -1,4 +1,5 @@
 open Parser
+open Errors
 
 let string_buffer = Buffer.create 512
 
@@ -9,6 +10,26 @@ let number = [%sedlex.regexp? Plus digit]
 let character = [%sedlex.regexp? 0x20 .. 0x7E]
 let identifier = [%sedlex.regexp? ('a'..'z' | 'A'..'Z' | '_') , Star ('a'..'z' | 'A'..'Z' | digit | '_')]
 let white_space = [%sedlex.regexp? ' ' | '\t' | '\n' | '\r']
+let escape = [%sedlex.regexp? '\\', ('0' | '\'' | '"' | 'b' | 'f' | 't' | '\\' | 'r' | 'n')]
+let stringchar = [%sedlex.regexp? 0x00 .. 0xFF]
+
+let unescape ch lexbuf = match ch with
+  | '0'   ->  char_of_int 0x00
+  | '\''  ->  '\''
+  | '"'   ->  '"'
+  | 'b'   ->  '\b'
+  | 'f'   ->  char_of_int 0x0C
+  | 't'   ->  '\t'
+  | '\\'  ->  '\\'
+  | 'r'   ->  '\r'
+  | 'n'   ->  '\n'
+  | _     ->  (
+    
+    let line = (fst (Sedlexing.lexing_positions lexbuf)).pos_lnum in
+    let col = (fst (Sedlexing.lexing_positions lexbuf)).pos_cnum
+    - (fst (Sedlexing.lexing_positions lexbuf)).pos_bol in
+    raise (Lexing_error (line, col, "Invalid escape character"))
+  )
 
 let rec token lexbuf =
   match%sedlex lexbuf with
@@ -51,6 +72,11 @@ let rec token lexbuf =
   | number          -> Number (int_of_string (Sedlexing.Latin1.lexeme lexbuf))
   | "0x", hexNumber -> Number (int_of_string ("0x" ^ (let x = Sedlexing.Latin1.lexeme lexbuf in String.sub x 2 (String.length x))))
   | "'"             -> char lexbuf
+  | '"'             -> (
+    Buffer.clear string_buffer;
+    string_literal lexbuf;
+    String (Buffer.contents string_buffer)
+  )
   | white_space     -> token lexbuf
   | ","             -> Comma
   | ";"             -> Semicolon
@@ -68,7 +94,12 @@ let rec token lexbuf =
   | "/*"            -> multiline_comment lexbuf
   | eof             -> EOF
   (* | inline_c_content, "}" -> INLINEC_CONTENT (Sedlexing.Latin1.lexeme lexbuf) *)
-  | any             -> failwith (Printf.sprintf "Unrecognised character: '%s'" (Sedlexing.Latin1.lexeme lexbuf))
+  | any ->
+    
+    let line = (fst (Sedlexing.lexing_positions lexbuf)).pos_lnum in
+    let col = (fst (Sedlexing.lexing_positions lexbuf)).pos_cnum
+    - (fst (Sedlexing.lexing_positions lexbuf)).pos_bol in
+    raise (Lexing_error (line, col, Printf.sprintf "Unrecognised character: '%s'" (Sedlexing.Latin1.lexeme lexbuf)))
   | _               -> failwith "Impossible!"
 
 and comment lexbuf =
@@ -88,13 +119,55 @@ and multiline_comment lexbuf =
 and char lexbuf =
   match%sedlex lexbuf with
   | character, "'"  -> Character (Sedlexing.Latin1.lexeme lexbuf).[0]
-  | _               -> failwith "Character not closed by a quote!"
+  | _ ->
+    
+    let line = (fst (Sedlexing.lexing_positions lexbuf)).pos_lnum in
+    let col = (fst (Sedlexing.lexing_positions lexbuf)).pos_cnum
+    - (fst (Sedlexing.lexing_positions lexbuf)).pos_bol in
+    raise (Lexing_error (line, col, "Character not closed by a quote!"))
 
 and inlineC lexbuf =
   match%sedlex lexbuf with
   | "END_C" -> ()
   | any -> (Buffer.add_string string_buffer (Sedlexing.Latin1.lexeme lexbuf); inlineC lexbuf)
-  | _ -> failwith "Inline C not closed by END_C!"
+  | _ -> 
+    
+    let line = (fst (Sedlexing.lexing_positions lexbuf)).pos_lnum in
+    let col = (fst (Sedlexing.lexing_positions lexbuf)).pos_cnum
+    - (fst (Sedlexing.lexing_positions lexbuf)).pos_bol in
+    raise (Lexing_error (line, col, "Inline C not closed by END_C!"))
+
+and string_literal lexbuf =
+  match%sedlex lexbuf with
+  | '"'       -> ()
+  | eof       -> (
+    
+    let line = (fst (Sedlexing.lexing_positions lexbuf)).pos_lnum in
+    let col = (fst (Sedlexing.lexing_positions lexbuf)).pos_cnum
+    - (fst (Sedlexing.lexing_positions lexbuf)).pos_bol in  
+    raise (Lexing_error (line, col, "Unterminated string"))
+  )
+  | escape ->
+  (
+      let chara = Sedlexing.Latin1.lexeme lexbuf in
+      Buffer.add_char string_buffer
+      (
+          match chara.[0] with
+              | '\\'  -> unescape (chara.[1]) lexbuf
+              | c     -> c
+      ); string_literal lexbuf
+  )
+  | stringchar -> (
+    Buffer.add_string string_buffer (Sedlexing.Latin1.lexeme lexbuf);
+    string_literal lexbuf
+  )
+  | _ -> (
+    (* Handle invalid characters in string literal *)
+    let line = (fst (Sedlexing.lexing_positions lexbuf)).pos_lnum in
+    let col = (fst (Sedlexing.lexing_positions lexbuf)).pos_cnum
+    - (fst (Sedlexing.lexing_positions lexbuf)).pos_bol in
+    raise (Lexing_error (line, col, "Invalid character in string literal"))
+  )
 
 let tokenize (lexbuf: Sedlexing.lexbuf) =
   token lexbuf

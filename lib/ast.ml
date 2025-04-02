@@ -52,6 +52,8 @@ and perkfun = Fun of perktype_complete * perkident * (perkvardesc list) * comman
 
 and expr = 
   | Int of int
+  | Char of char
+  | String of string
   | Pointer of expr
   | Var of perkident
     (* classname, identifier *)
@@ -74,7 +76,7 @@ and command =
   | IfThenElse of expr * command * command
   | Whiledo of expr * command
   | Dowhile of expr * command
-  | For of expr * expr * command * command
+  | For of command * expr * command * command
   | Expr of expr
   | Switch of expr * (expr * command) list
   | Skip
