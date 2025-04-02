@@ -146,6 +146,8 @@ and codegen_expr (e: expr) : string =
 and codegen_binop (op: binop) : string =
   match op with
   | Add -> "+"
+  | Mul -> "*"
+  | Div -> "/"
   | Sub -> "-"
   | Eq -> "=="
   | Lt -> "<"
