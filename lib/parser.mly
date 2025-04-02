@@ -1,13 +1,13 @@
 /* Tokens declarations */
 %token EOF
-%token Plus Eq Lt Leq Gt Geq Minus Star
+%token Plus Eq Lt Leq Gt Geq Minus Star Div Times
 %token Fun Assign If Else While Do For
 %token <int> Number
 %token <char> Character
 %token <string> Ident
 %token Comma Semicolon Colon LParen RParen LBrace RBrace LBracket RBracket Bang
 %token Arrow Bigarrow
-%token Skip Return
+%token Skip Return Let
 %token <string> InlineC
 
 /* Precedence and associativity specification */
@@ -55,14 +55,14 @@ command:
   | Return e = expr                                                                                        { Ast.Return (e) }
 
 perkdef:
-  | vd = perkvardesc Assign e = expr                                                                       { (vd, e) }
+  | Let vd = perkvardesc Assign e = expr                                                                   { (vd, e) }
 
 perkfun:
   | i = Ident LParen id_list = perkvardesc_list RParen Colon rt = perktype LBrace c = command RBrace       { Ast.Fun (rt, i, id_list, c) }
   | i = Ident LParen RParen Colon rt = perktype LBrace c = command RBrace                                  { Ast.Fun (rt, i, [], c) }
 
 perkvardesc:
-  | t = perktype i = Ident                                                                                 { (t, i) }
+  | i = Ident Colon t = perktype                                                                           { (t, i) }
   
 perkfuntype:
   | t1 = perktype Arrow t2 = perktype                                                                      { Ast.Funtype ([t1], t2) }
@@ -90,6 +90,8 @@ perktype:
 %inline binop:
   | Plus                                                                                                   { Ast.Add }
   | Minus                                                                                                  { Ast.Sub }
+  | Star                                                                                                   { Ast.Mul }
+  | Div                                                                                                    { Ast.Div }
   | Eq                                                                                                     { Ast.Eq }
   | Lt                                                                                                     { Ast.Lt }
   | Leq                                                                                                    { Ast.Leq }

@@ -14,6 +14,8 @@ type perkdecl = perkvardesc
 type binop =
   | Add
   | Sub
+  | Mul
+  | Div
   | Eq
   | Lt
   | Leq

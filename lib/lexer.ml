@@ -37,6 +37,7 @@ let rec token lexbuf =
   | "break"         -> Break
   | "continue"      -> Continue *)
   | "skip"          -> Skip
+  | "let"           -> Let
   | "->"            -> Arrow
   | "=>"            -> Bigarrow
   | identifier      -> Ident (Sedlexing.Latin1.lexeme lexbuf)
@@ -54,7 +55,8 @@ let rec token lexbuf =
   | "["             -> LBracket
   | "]"             -> RBracket
   | "!"             -> Bang
-  | "*"            -> Star
+  | "*" | "×"       -> Star
+  | "/"             -> Div
   | "//"            -> comment lexbuf
   | "/*"            -> multiline_comment lexbuf
   | eof             -> EOF
