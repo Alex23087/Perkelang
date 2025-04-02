@@ -102,7 +102,7 @@ perktype:
   | i = Ident                                                                                              { Ast.Basetype i }
   | LBracket t = perktype_complete RBracket                                                                         { Ast.Arraytype (t, None) }
   | LBracket t = perktype_complete n = Number RBracket                                                              { Ast.Arraytype (t, Some n) }
-  // | t = perktype_complete Star                                                                                      { Ast.Pointertype t }
+  | t = perktype_complete Star                                                                                      { Ast.Pointertype t }
 
 %inline binop:
   | Plus                                                                                                   { Ast.Add }

@@ -1,3 +1,3 @@
 _build
-test/a.out
+test/*.out
 test/test.c

@@ -21,3 +21,5 @@ deps:
 
 run: build
 	./_build/default/bin/compiler.exe test/test.perk
+	gcc -o test/test.out test/test.c
+	./test/test.out

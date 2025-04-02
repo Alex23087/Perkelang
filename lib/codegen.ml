@@ -75,7 +75,7 @@ and codegen_program (cmd: command) : string =
   Hashtbl.fold (fun _ v acc ->
     Printf.sprintf "%s%s;\n" acc (snd v)
   ) lambdas_hashmap ""
-  ^ "\n" ^ body ^ ";"
+  ^ "\n" ^ body
 
 and codegen_command (cmd: command) (indentation: int) : string =
   let indent_string = String.make (4 * indentation) ' ' in
