@@ -47,7 +47,7 @@ and get_lambda (e: expr) : (string * string) =
       let body_str = codegen_command body 1 in
       let funtype  = ([Static], Funtype (List.map (fun (t, _) -> t) args, retype), []) in
       put_symbol id funtype;
-      Printf.sprintf "%s %s(%s) {\n%s\n}" type_str id args_str body_str
+      Printf.sprintf "static %s %s(%s) {\n%s\n}" type_str id args_str body_str
     )
     | _ -> failwith "get_lambda: not a lambda expression")
     in
