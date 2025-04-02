@@ -13,11 +13,21 @@ archetype Superpera {
     super_palle : int
 };
 
-model Bnanana: Superbanana, Superpera {
+model Prera {
+    let sub: int -> int = (x: int): int => {x - 5}
+};
+
+model Bnanana: Superbanana {
     let super_palle: int = 0,
     let altracosa : int = 0,
 
-    let add: int -> int = (x: int): int => {x + 5}
+    let add: int -> int = (x: int): int => {x + 5},
+    let constructor: (int * int) -> void = (super_palle: int, altracosa: int): void => {
+        self.super_palle = super_palle;
+        self.altracosa = altracosa;
+    },
+
+    let p: Prera = 0
 };
 
 let counter: int = 0;
@@ -38,6 +48,10 @@ let map : (((int -> int) * int * int*) -> int*) = (f : int -> int, n : int, A : 
 };
 
 fun main(): int {
+    //let new banana: Bnanana(10, 0);
+
+    summon banana : Bnanana(10, 0);
+
     let square : int -> int = (a : int): int => {
         return a * a
     };
@@ -53,4 +67,7 @@ fun main(): int {
     for (let i: int = 0; i < 10; i = i+1) {
         printf("%d\t%d\n", A[i], B[i]);
     };
+
+    printf("%d\n", banana.super_palle);
+    banana.add(10);
 }

@@ -19,6 +19,7 @@ let rec type_descriptor_of_perktype (t : perktype_complete) : string =
   let _, t, _ = t in
   match t with
   | Basetype s -> s
+  | Structtype s -> "struct_" ^ s
   | Funtype (args, ret) ->
       let args_str =
         String.concat "__" (List.map type_descriptor_of_perktype args)
@@ -39,6 +40,11 @@ let import_list : string list ref = ref []
 let archetype_hashtable :
     (string, (string, perktype_complete) Hashtbl.t) Hashtbl.t =
   Hashtbl.create 10
+
+let struct_def_list : string list ref = ref []
+
+let add_struct_def (code : string) : unit =
+  struct_def_list := code :: !struct_def_list
 
 let add_archetype (name : string) : (string, perktype_complete) Hashtbl.t =
   let new_archetype = Hashtbl.create 10 in
@@ -127,6 +133,9 @@ and codegen_program (cmd : command) : string =
       (fun _ v acc -> Printf.sprintf "%s%s;\n" acc (snd_3 v))
       function_type_hashmap ""
   ^ "\n"
+  (* Write struct definitions *)
+  ^ String.concat "\n" (List.rev !struct_def_list)
+  ^ "\n\n"
   (* Write hoisted function signatures *)
   ^ Hashtbl.fold
       (fun id typ acc -> Printf.sprintf "%s%s;\n" acc (codegen_fundecl id typ))
@@ -147,22 +156,32 @@ and codegen_command (cmd : command) (indentation : int) : string =
           let typ, id = t in
           add_binding_to_archetype i id typ)
         l;
-      Printf.sprintf "%sstruct %s {\n%s\n};" indent_string i
-        (if List.length l = 0 then ""
-         else
-           (indent_string ^ "    "
-           ^ String.concat
-               (";\n" ^ indent_string ^ "    ")
-               (List.map
-                  (fun ((a, typ, d), id) ->
-                    let typ =
-                      match typ with
-                      | Funtype _ -> (a, typ, d)
-                      | _ -> ([], Pointertype (a, typ, d), [])
-                    in
-                    codegen_decl (typ, id))
-                  l))
-           ^ ";")
+      add_struct_def
+        (Printf.sprintf "%sstruct %s {\n%s\n};\n" indent_string i
+           (if List.length l = 0 then ""
+            else
+              (indent_string ^ "    "
+              ^ String.concat
+                  (";\n" ^ indent_string ^ "    ")
+                  (List.map
+                     (fun ((a, typ, d), id) ->
+                       let typ =
+                         match typ with
+                         | Funtype (params, ret) ->
+                             ( a,
+                               Funtype
+                                 ( ( [],
+                                     Pointertype ([], Basetype "void", []),
+                                     [] )
+                                   :: params,
+                                   ret ),
+                               d )
+                         | _ -> ([], Pointertype (a, typ, d), [])
+                       in
+                       codegen_decl (typ, id))
+                     l))
+              ^ ";"));
+      ""
   | Model (name, il, defs) ->
       let mems = List.map (fun ((typ, id), _) -> (typ, id)) defs in
       let archetypes = List.map get_archetype il in
@@ -180,23 +199,53 @@ and codegen_command (cmd : command) (indentation : int) : string =
       if not has_all_the_right_things then
         raise (TypeError "Model does not properly implement Archetype")
       else
-        Printf.sprintf "%sstruct %s {\n%s\n\n%s\n};" indent_string name
+        let defs =
+          List.map
+            (fun ((typ, id), expr) ->
+              let selftype =
+                ([], Pointertype ([], Structtype name, []), [])
+              in
+              match (typ, expr) with
+              | ( (attrs, Funtype (params, ret), specs),
+                  Lambda (lret, lparams, lexpr) ) ->
+                  ( ((attrs, Funtype (selftype :: params, ret), specs), id),
+                    Lambda (lret, (selftype, "self") :: lparams, lexpr) )
+              | _ -> ((typ, id), expr))
+            defs
+        in
+        let mems = List.map (fun ((typ, id), _) -> (typ, id)) defs in
+        add_struct_def
+          (Printf.sprintf "%sstruct %s {\n%s%s\n};\n%stypedef struct %s* %s;\n" indent_string name 
+             (if List.length mems = 0 then ""
+              else
+                (indent_string ^ "    "
+                ^ String.concat
+                    (";\n" ^ indent_string ^ "    ")
+                    (List.map codegen_decl mems))
+                ^ ";")
+             (if List.length il = 0 then ""
+              else
+                "\n\n" ^ String.concat "\n"
+                  (List.map
+                     (fun s ->
+                       Printf.sprintf "%sstruct %s %s;" (indent_string ^ "    ")
+                         s s)
+                     il))
+              indent_string
+              name name
+                     );
+        Printf.sprintf "%svoid %s_init(struct %s* obj) {\n%s\n}\n" indent_string
+          name name
           (if List.length mems = 0 then ""
            else
-             (indent_string ^ "    "
+             indent_string ^ "    "
              ^ String.concat
                  (";\n" ^ indent_string ^ "    ")
-                 (List.map codegen_decl mems))
+                 (List.map
+                    (fun ((typ, id), expr) ->
+                      Printf.sprintf "obj->%s = (%s) %s" id (codegen_type typ) (codegen_expr expr))
+                    defs)
              ^ ";")
-          (if List.length il = 0 then ""
-           else
-             String.concat "\n"
-               (List.map
-                  (fun s ->
-                    Printf.sprintf "%sstruct %s %s;" (indent_string ^ "    ") s
-                      s)
-                  il))
-        ^ "\n"
   | InlineC s -> s
   | Block c ->
       indent_string ^ "{\n"
@@ -211,7 +260,12 @@ and codegen_command (cmd : command) (indentation : int) : string =
   | Seq (c1, c2) ->
       let c1_code = codegen_command c1 indentation in
       let c2_code = codegen_command c2 indentation in
-      Printf.sprintf "%s\n%s" c1_code c2_code
+      if String.length c1_code = 0 then
+        Printf.sprintf "%s" c2_code
+      else if String.length c2_code = 0 then
+        Printf.sprintf "%s" c1_code
+      else
+        Printf.sprintf "%s\n%s" c1_code c2_code
   | IfThenElse (e, c1, c2) ->
       indent_string
       ^ Printf.sprintf "if (%s) {\n%s\n%s} else {\n%s\n%s}" (codegen_expr e)
@@ -265,6 +319,14 @@ and codegen_command (cmd : command) (indentation : int) : string =
   | Import lib ->
       add_import lib;
       ""
+  | Summon (name, typident, args) -> (
+    let args_str = 
+      String.concat ", "
+        (List.map
+           codegen_expr args) in
+    (* Printf.sprintf "%sstruct %s %s;\n%s%s_init(&%s);\n%s%s.constructor((void*)&%s, %s);" indent_string typident name indent_string typident name indent_string name name args_str *)
+    Printf.sprintf "%s%s %s = malloc(sizeof(struct %s));\n%s%s_init(%s);\n%s%s->constructor((void*)%s, %s);" indent_string typident name typident indent_string typident name indent_string name name args_str
+  )
   | Return e -> indent_string ^ Printf.sprintf "return %s;" (codegen_expr e)
 
 and codegen_def (t : perkvardesc) (e : expr) : string =
@@ -298,7 +360,9 @@ and codegen_type ?(expand : bool = false) (t : perktype_complete) : string =
   let type_str =
     match t' with
     | Basetype s -> s
+    | Structtype s -> "struct " ^ s
     | Funtype _ -> t |> get_function_type |> if expand then thrd_3 else fst_3
+    | Pointertype ([], Structtype _, _) when expand -> "void*"
     | Pointertype t -> Printf.sprintf "%s*" (codegen_type t ~expand)
     | Arraytype (t, Some n) ->
         Printf.sprintf "%s[%d]" (codegen_type t ~expand) n
@@ -333,8 +397,17 @@ and codegen_expr (e : expr) : string =
       Printf.sprintf "*%s" code
   | Var id -> id
   | Apply (e, args) ->
+      let expr_str = codegen_expr e in
       let args_str = String.concat ", " (List.map codegen_expr args) in
-      Printf.sprintf "%s(%s)" (codegen_expr e) args_str
+      (match e with
+      | Binop (Dot, e1, _) ->
+        let e1_str = codegen_expr e1 in
+          Printf.sprintf "%s(%s, %s)" expr_str e1_str args_str
+      | _ -> Printf.sprintf "%s(%s)" expr_str args_str
+      )
+  | Binop (Dot, e1, e2) ->
+      Printf.sprintf "%s%s%s" (codegen_expr e1) (codegen_binop Dot)
+        (codegen_expr e2)
   | Binop (op, e1, e2) ->
       Printf.sprintf "%s %s %s" (codegen_expr e1) (codegen_binop op)
         (codegen_expr e2)
@@ -358,6 +431,7 @@ and codegen_binop (op : binop) : string =
   | Leq -> "<="
   | Gt -> ">"
   | Geq -> ">="
+  | Dot -> "->"
 
 and codegen_preunop (op : preunop) : string =
   match op with

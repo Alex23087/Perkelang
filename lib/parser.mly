@@ -5,7 +5,7 @@
 
 /* Tokens declarations */
 %token EOF
-%token Plus Eq Lt Leq Gt Geq Minus Star Div Ampersand PlusPlus MinusMinus
+%token Plus Eq Lt Leq Gt Geq Minus Star Div Ampersand PlusPlus MinusMinus Dot
 %token Fun Assign If Else While Do For
 %token <int> Number
 %token <char> Character
@@ -18,13 +18,15 @@
 %token Const Volatile Restrict
 %token <string> InlineC
 %token Import Open
-%token Archetype Model
+%token Archetype Model Summon
 
 /* Precedence and associativity specification */
-%left Plus Minus
+%left Plus Minus Star Div
 %left Lt Leq Gt Geq
 %left Eq
 %left Arrow
+%left LParen
+%left Dot
 
 /* Starting symbol */
 %start program
@@ -73,6 +75,9 @@ command:
 
   | Archetype i = Ident LBrace l = perkvardesc_list RBrace                                                 { Ast.Archetype (i, l) }
   | Model i = Ident Colon il = ident_list LBrace l = perkdef_list RBrace                                   { Ast.Model (i, il, l) }
+  | Model i = Ident LBrace l = perkdef_list RBrace                                                         { Ast.Model (i, [], l) }
+  | Summon i = Ident Colon typident = Ident LParen l = expr_list RParen                                    { Summon (i, typident, l) }
+  | Summon i = Ident Colon typident = Ident LParen RParen                                                  { Summon (i, typident, []) }
 
 
   | error                                                                                                  { raise (ParseError("command expected")) }
@@ -154,6 +159,7 @@ perktype:
   | Leq                                                                                                    { Ast.Leq }
   | Gt                                                                                                     { Ast.Gt }
   | Geq                                                                                                    { Ast.Geq }
+  | Dot                                                                                                    { Ast.Dot }
 
 %inline preunop:
   | Minus                                                                                                  { Ast.Neg }
@@ -169,6 +175,11 @@ perktype:
 
 
 /* New nonterminals for disambiguated lists */
+
+expr_list:
+  | e = expr { [e] }
+  | el = expr_list Comma e = expr { el @ [e] }
+  | error { raise (ParseError("expression expected")) }
 
 ident_list:
   | i = Ident { [i] }

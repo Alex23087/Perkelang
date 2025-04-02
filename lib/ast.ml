@@ -15,7 +15,7 @@ type perktype_qualifier =
 [@@deriving show]
 
 (* type of the perk -- giangpt *)
-type perktype = Basetype of string | Funtype of (perktype_complete list) * perktype_complete | Pointertype of perktype_complete | Arraytype of perktype_complete * (int option) | Classtype of string
+type perktype = Basetype of string | Funtype of (perktype_complete list) * perktype_complete | Pointertype of perktype_complete | Arraytype of perktype_complete * (int option) | Classtype of string | Structtype of string
 [@@deriving show]
 
 and perktype_complete = perktype_attribute list * perktype * perktype_qualifier list
@@ -37,6 +37,7 @@ type binop =
   | Leq
   | Gt
   | Geq
+  | Dot
 (*  ... boolean and bitwise ops and all that  *)
 [@@deriving show]
 
@@ -88,5 +89,6 @@ and command =
   | Skip
   | Archetype of perkident * perkdecl list
   | Model of perkident * perkident list * perkdef list
+  | Summon of perkident * perkident * expr list
   | Return of expr
   [@@deriving show]

@@ -51,6 +51,8 @@ let rec token lexbuf =
   | "++"            -> PlusPlus
   | "--"            -> MinusMinus
   | "&"             -> Ampersand
+  | "."             -> Dot
+  (* | "☠" | "forget" | "forgor" -> Forgor *)
   | "if"            -> If
   | "else"          -> Else
   | "while"         -> While
@@ -75,6 +77,7 @@ let rec token lexbuf =
   | "false"         -> Number 0
   | "archetype" | "theory" | "interface" | "prototype" | "trait" | "typeclass" -> Archetype  (* TODO reinvent the wheel*)
   | "model" | "impl" | "class"     -> Model
+  | "summon"        -> Summon
   | "->"            -> Arrow
   | "=>"            -> Bigarrow
   | identifier      -> Ident (Sedlexing.Latin1.lexeme lexbuf)
