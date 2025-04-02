@@ -48,6 +48,9 @@ let rec token lexbuf =
   | "!"             -> Bang
   | "fun"           -> Fun
   | "="             -> Assign
+  | "++"            -> PlusPlus
+  | "--"            -> MinusMinus
+  | "&"             -> Ampersand
   | "if"            -> If
   | "else"          -> Else
   | "while"         -> While
@@ -66,6 +69,10 @@ let rec token lexbuf =
   | "const"         -> Const
   | "volatile"      -> Volatile
   | "restrict"      -> Restrict
+  | "import"        -> Import
+  | "open"          -> Open
+  | "true"          -> Number 1
+  | "false"         -> Number 0
   | "->"            -> Arrow
   | "=>"            -> Bigarrow
   | identifier      -> Ident (Sedlexing.Latin1.lexeme lexbuf)

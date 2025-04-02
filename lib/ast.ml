@@ -40,7 +40,9 @@ type binop =
 (*  ... boolean and bitwise ops and all that  *)
 [@@deriving show]
 
-type unop = Neg | Not (*....*) [@@deriving show]
+type preunop = Neg | Not | Dereference | Reference | PreIncrement | PreDecrement [@@deriving show]
+
+type postunop = PostIncrement | PostDecrement [@@deriving show]
 
 type perkdef = perkdecl * expr [@@deriving show]
   
@@ -60,18 +62,22 @@ and expr =
   (* | Ob of string * int *)
   | Apply of expr * (expr list)
   | Binop of binop * expr * expr
-  | Unop of unop * expr
+  | PreUnop of preunop * expr
   | Lambda of perktype_complete * (perkvardesc list) * command
+  | PostUnop of postunop * expr
+  | Parenthesised of expr
+  | Subscript of expr * expr
   [@@deriving show]
   
 (* Syntax of the language *)
 and command =
+  | Import of string
   | InlineC of string
   | Block of command
   | Def of perkdef
   | Fundef of perkfun
   (* | Classdecl of perklass *)
-  | Assign of (string * expr)
+  | Assign of (expr * expr)
   | Seq of command * command
   | IfThenElse of expr * command * command
   | Whiledo of expr * command

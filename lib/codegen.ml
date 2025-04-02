@@ -24,6 +24,10 @@ let rec type_descriptor_of_perktype (t: perktype_complete) : string =
 let function_type_hashmap: (perktype_complete, (string * string * string)) Hashtbl.t = Hashtbl.create 10
 let lambdas_hashmap: (expr, (string * string)) Hashtbl.t = Hashtbl.create 10
 let symbol_table: (perkident, perktype_complete) Hashtbl.t = Hashtbl.create 10
+let import_list: (string list) ref = ref []
+let add_import (lib: string) : unit =
+  if not (List.mem lib !import_list) then
+    import_list := lib :: !import_list
 
 let rec get_function_type (t: perktype_complete) : (string * string * string) =
   try Hashtbl.find function_type_hashmap t
@@ -68,6 +72,9 @@ and put_symbol (ident: perkident) (typ: perktype_complete): unit =
 
 and codegen_program (cmd: command) : string =
   let body = codegen_command cmd 0 in
+  (* Write includes *)
+  String.concat "\n" (List.map (fun lib -> Printf.sprintf "#include %s" lib) !import_list)
+  ^ "\n\n" ^
   (* Write typedefs *)
   Hashtbl.fold (fun _ v acc ->
     Printf.sprintf "%s%s;\n" acc (snd_3 v)
@@ -92,7 +99,7 @@ and codegen_command (cmd: command) (indentation: int) : string =
   | Block c -> indent_string ^ "{\n" ^ codegen_command c (indentation + 1) ^ "\n" ^ indent_string ^ "}"
   | Def (t, e) -> indent_string ^ codegen_def t e
   | Fundef (Fun(t, id, args, body)) -> indent_string ^ codegen_fundef t id args body
-  | Assign (s, e) -> indent_string ^ Printf.sprintf "%s = %s;" s (codegen_expr e)
+  | Assign (l, r) -> indent_string ^ Printf.sprintf "%s = %s;" (codegen_expr l) (codegen_expr r)
   | Seq (c1, c2) -> Printf.sprintf "%s\n%s" (codegen_command c1 indentation) (codegen_command c2 indentation)
   | IfThenElse (e, c1, c2) ->
     indent_string ^ Printf.sprintf ("if (%s) {\n%s\n%s} else {\n%s\n%s}") (codegen_expr e) (codegen_command c1 (indentation + 1)) indent_string (codegen_command c2 (indentation + 1)) indent_string
@@ -112,6 +119,7 @@ and codegen_command (cmd: command) (indentation: int) : string =
   | Switch (e, cases) ->
       let cases_str = String.concat "\n" (List.map (fun (e, c) -> indent_string ^ "    " ^ Printf.sprintf "case %s: {\n%s\n}" (codegen_expr e) (codegen_command c (indentation + 1))) cases) in
       indent_string ^ Printf.sprintf "switch (%s) {\n%s\n%s}" (codegen_expr e) cases_str indent_string
+  | Import lib -> add_import lib; ""
   | Return e -> indent_string ^ Printf.sprintf "return %s;" (codegen_expr e)
 
 and codegen_def (t: perkvardesc) (e: expr) : string =
@@ -179,11 +187,20 @@ and codegen_expr (e: expr) : string =
       Printf.sprintf "%s(%s)" (codegen_expr e) args_str)
   | Binop (op, e1, e2) ->
       Printf.sprintf "%s %s %s" (codegen_expr e1) (codegen_binop op) (codegen_expr e2)
-  | Unop (op, e) -> (
-    Printf.sprintf "%s %s" (codegen_unop op) (codegen_expr e)
+  | PreUnop (op, e) -> (
+    Printf.sprintf "%s%s" (codegen_preunop op) (codegen_expr e)
+  )
+  | PostUnop (op, e) -> (
+    Printf.sprintf "%s%s" (codegen_expr e) (codegen_postunop op)
+  )
+  | Parenthesised e -> (
+    Printf.sprintf "(%s)" (codegen_expr e)
   )
   | Lambda _ -> (
       e |> get_lambda |> fst
+  )
+  | Subscript (e1, e2) -> (
+    Printf.sprintf "%s[%s]" (codegen_expr e1) (codegen_expr e2)
   )
 
 and codegen_binop (op: binop) : string =
@@ -198,10 +215,19 @@ and codegen_binop (op: binop) : string =
   | Gt -> ">"
   | Geq -> ">="
 
-and codegen_unop (op: unop) : string =
+and codegen_preunop (op: preunop) : string =
   match op with
   | Neg -> "-"
   | Not -> "!"
+  | Dereference -> "*"
+  | Reference -> "&"
+  | PreIncrement -> "++"
+  | PreDecrement -> "--"
+
+and codegen_postunop (op: postunop) : string =
+  match op with
+  | PostIncrement -> "++"
+  | PostDecrement -> "--"
 
 and codegen_fundecl (id: perkident) (typ: perktype_complete): string =
   let attrs, t, _ = typ in
