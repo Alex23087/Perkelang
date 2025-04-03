@@ -1,5 +1,6 @@
 %{
   open Errors
+  open Ast
 %}
 
 
@@ -31,17 +32,17 @@
 
 /* Starting symbol */
 %start program
-%type <Ast.command> program
-%type <Ast.command> command
+%type <Ast.command_a> program
+%type <Ast.command_a> command
 %type <Ast.perkdef> perkdef
 %type <Ast.perkvardesc> perkvardesc
-%type <Ast.command> perkfun
+%type <Ast.command_a> perkfun
 %type <Ast.perktype> perktype
 %type <Ast.perktype_partial> perkfuntype
 %type <Ast.binop> binop
 %type <Ast.preunop> preunop
 %type <Ast.postunop> postunop
-%type <Ast.expr> expr
+%type <Ast.expr_a> expr
 %type <Ast.perkident list> ident_list
 %type <Ast.perktype list> perktype_list
 
@@ -55,29 +56,29 @@ program:
   | c = command EOF { c }
 
 command:
-  | Import i = String                                                                                      { Ast.Import ("<" ^ i ^ ">") }
-  | Open i = String                                                                                        { Ast.Import ("\"" ^ i ^ "\"") }
-  | ic = InlineC                                                                                           { Ast.InlineC(ic) }
-  | d = perkdef                                                                                            { Ast.Def d }
+  | Import i = String                                                                                      { annotate_2_code $loc (Ast.Import ("<" ^ i ^ ">")) }
+  | Open i = String                                                                                        { annotate_2_code $loc (Ast.Import ("\"" ^ i ^ "\"")) }
+  | ic = InlineC                                                                                           { annotate_2_code $loc (Ast.InlineC(ic)) }
+  | d = perkdef                                                                                            { annotate_2_code $loc (Ast.Def d) }
   | Fun pf = perkfun                                                                                       { pf }
-  | l = expr Assign r = expr                                                                               { Ast.Assign (l, r) }
-  | If LParen e = expr RParen LBrace c1 = command RBrace Else LBrace c2 = command RBrace                   { Ast.IfThenElse (e, c1, c2) }
-  | If LParen e = expr RParen LBrace c1 = command RBrace                                                   { Ast.IfThenElse (e, c1, Ast.Skip) }
-  | While LParen e = expr RParen LBrace c = command RBrace                                                 { Ast.Whiledo (e, c) }
-  | Do LBrace c = command RBrace While LParen e = expr RParen                                              { Ast.Dowhile (e, c) }
-  | For LParen c1 = command Semicolon e2 = expr Semicolon c3 = command RParen LBrace body = command RBrace { Ast.For (c1, e2, c3, body) }
-  | LBrace c = command RBrace                                                                              { Ast.Block(c) }
-  | e = expr                                                                                               { Ast.Expr(e) }
-  | c1 = command Semicolon c2 = command                                                                    { Ast.Seq (c1, c2) }
+  | l = expr Assign r = expr                                                                               { annotate_2_code $loc (Ast.Assign (l, r)) }
+  | If LParen e = expr RParen LBrace c1 = command RBrace Else LBrace c2 = command RBrace                   { annotate_2_code $loc (Ast.IfThenElse (e, c1, c2)) }
+  | If LParen e = expr RParen LBrace c1 = command RBrace                                                   { annotate_2_code $loc (Ast.IfThenElse (e, c1, annotate_dummy Ast.Skip)) }
+  | While LParen e = expr RParen LBrace c = command RBrace                                                 { annotate_2_code $loc (Ast.Whiledo (e, c)) }
+  | Do LBrace c = command RBrace While LParen e = expr RParen                                              { annotate_2_code $loc (Ast.Dowhile (e, c)) }
+  | For LParen c1 = command Semicolon e2 = expr Semicolon c3 = command RParen LBrace body = command RBrace { annotate_2_code $loc (Ast.For (c1, e2, c3, body)) }
+  | LBrace c = command RBrace                                                                              { annotate_2_code $loc (Ast.Block(c)) }
+  | e = expr                                                                                               { annotate_2_code $loc (Ast.Expr(e)) }
+  | c1 = command Semicolon c2 = command                                                                    { annotate_2_code $loc (Ast.Seq (c1, c2)) }
   | c1 = command Semicolon                                                                                 { c1 }
-  | Skip                                                                                                   { Ast.Skip }
-  | Return e = expr                                                                                        { Ast.Return (e) }
+  | Skip                                                                                                   { annotate_2_code $loc (Ast.Skip) }
+  | Return e = expr                                                                                        { annotate_2_code $loc (Ast.Return (e)) }
 
-  | Archetype i = Ident LBrace l = perkvardesc_list RBrace                                                 { Ast.Archetype (i, l) }
-  | Model i = Ident Colon il = ident_list LBrace l = perkdef_list RBrace                                   { Ast.Model (i, il, l) }
-  | Model i = Ident LBrace l = perkdef_list RBrace                                                         { Ast.Model (i, [], l) }
-  | Summon i = Ident Colon typident = Ident LParen l = expr_list RParen                                    { Summon (i, typident, l) }
-  | Summon i = Ident Colon typident = Ident LParen RParen                                                  { Summon (i, typident, []) }
+  | Archetype i = Ident LBrace l = perkvardesc_list RBrace                                                 { annotate_2_code $loc (Ast.Archetype (i, l)) }
+  | Model i = Ident Colon il = ident_list LBrace l = perkdef_list RBrace                                   { annotate_2_code $loc (Ast.Model (i, il, l)) }
+  | Model i = Ident LBrace l = perkdef_list RBrace                                                         { annotate_2_code $loc (Ast.Model (i, [], l)) }
+  | Summon i = Ident Colon typident = Ident LParen l = expr_list RParen                                    { annotate_2_code $loc (Summon (i, typident, l)) }
+  | Summon i = Ident Colon typident = Ident LParen RParen                                                  { annotate_2_code $loc (Summon (i, typident, [])) }
 
 
   | error                                                                                                  { raise (ParseError("command expected")) }
@@ -95,8 +96,8 @@ perkdef:
   | error { raise (ParseError("definition expected (e.g. let banana : int = 5)")) }
 
 perkfun:
-  | i = Ident LParen id_list = perkvardesc_list RParen Colon rt = perktype LBrace c = command RBrace       { Ast.Fundef (rt, i, id_list, c) }
-  | i = Ident LParen RParen Colon rt = perktype LBrace c = command RBrace                                  { Ast.Fundef (rt, i, [], c) }
+  | i = Ident LParen id_list = perkvardesc_list RParen Colon rt = perktype LBrace c = command RBrace       { annotate_2_code $loc (Ast.Fundef (rt, i, id_list, c)) }
+  | i = Ident LParen RParen Colon rt = perktype LBrace c = command RBrace                                  { annotate_2_code $loc (Ast.Fundef (rt, i, [], c)) }
   
 
 perkvardesc:
@@ -108,20 +109,21 @@ perkvardesc:
   | LParen tl = perktype_list RParen Arrow tf = perktype                                          { Ast.Funtype (tl, tf) }
 
 expr:
-  | Star e = expr                                                                                          { Ast.Pointer e }
-  | e1 = expr LParen args = separated_list(Comma, expr) RParen                                             { Ast.Apply (e1, args) }
-  | e1 = expr b = binop e2 = expr                                                                          { Ast.Binop (b, e1, e2) }
-  | u = preunop e = expr                                                                                   { Ast.PreUnop (u, e) }
-  | e = expr u = postunop                                                                                  { Ast.PostUnop (u, e) }
-  | LParen id_list = perkvardesc_list RParen Colon ret = perktype Bigarrow LBrace c = command RBrace       { Ast.Lambda (ret, id_list, c) }
-  | LParen RParen Colon ret = perktype Bigarrow LBrace c = command RBrace                                  { Ast.Lambda (ret, [], c) }
-  | n = Integer                                                                                            { Ast.Int (n) }
-  | f = Float                                                                                              { Ast.Float (f) }
-  | c = Character                                                                                          { Ast.Char (c) }
-  | s = String                                                                                             { Ast.String (s) }
-  | i = Ident                                                                                              { Ast.Var(i) }
-  | LParen e = expr RParen                                                                                 { Ast.Parenthesised e }
-  | e1 = expr LBracket e2 = expr RBracket                                                                  { Ast.Subscript (e1, e2) }
+  | Star e = expr                                                                                          { annotate_2_code $loc (Ast.Pointer e) }
+  | e1 = expr LParen args = separated_list(Comma, expr) RParen                                             { annotate_2_code $loc (Ast.Apply (e1, args)) }
+  | e1 = expr b = binop e2 = expr                                                                          { annotate_2_code $loc (Ast.Binop (b, e1, e2)) }
+  | u = preunop e = expr                                                                                   { annotate_2_code $loc (Ast.PreUnop (u, e)) }
+  | e = expr u = postunop                                                                                  { annotate_2_code $loc (Ast.PostUnop (u, e)) }
+  | LParen id_list = perkvardesc_list RParen Colon ret = perktype Bigarrow LBrace c = command RBrace       { annotate_2_code $loc (Ast.Lambda (ret, id_list, c)) }
+  | LParen RParen Colon ret = perktype Bigarrow LBrace c = command RBrace                                  { annotate_2_code $loc (Ast.Lambda (ret, [], c)) }
+  | n = Integer                                                                                            { annotate_2_code $loc (Ast.Int (n)) }
+  | f = Float                                                                                              { annotate_2_code $loc (Ast.Float (f)) }
+  | c = Character                                                                                          { annotate_2_code $loc (Ast.Char (c)) }
+  | s = String                                                                                             { annotate_2_code $loc (Ast.String (s)) }
+  | i = Ident                                                                                              { annotate_2_code $loc (Ast.Var(i)) }
+  | LParen e = expr RParen                                                                                 { annotate_2_code $loc (Ast.Parenthesised e) }
+  | e1 = expr LBracket e2 = expr RBracket                                                                  { annotate_2_code $loc (Ast.Subscript (e1, e2)) }
+
   | error                                                                                                  { raise (ParseError("expression expected")) }
   | expr error                                                                                             { raise (ParseError("unexpected expression")) }
   | Ident error                                                                                            { raise (ParseError("unexpected expression. Perhaps you tried to use C-style types?")) }

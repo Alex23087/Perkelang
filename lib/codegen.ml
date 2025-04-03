@@ -32,7 +32,7 @@ let rec type_descriptor_of_perktype (t : perktype) : string =
 let function_type_hashmap : (perktype, string * string * string) Hashtbl.t =
   Hashtbl.create 10
 
-let lambdas_hashmap : (expr, string * string) Hashtbl.t = Hashtbl.create 10
+let lambdas_hashmap : (expr_a, string * string) Hashtbl.t = Hashtbl.create 10
 let symbol_table : (perkident, perktype) Hashtbl.t = Hashtbl.create 10
 let import_list : string list ref = ref []
 
@@ -88,12 +88,12 @@ let rec get_function_type (t : perktype) : string * string * string =
         (type_str, typedef_str, expanded_str)
     | _ -> failwith "get_function_type: not a function type")
 
-and get_lambda (e : expr) : string * string =
+and get_lambda (e : expr_a) : string * string =
   try Hashtbl.find lambdas_hashmap e
   with Not_found ->
     let id = fresh_var () in
     let compiled =
-      match e with
+      match ( $ ) e with
       | Lambda (retype, args, body) ->
           let type_str = codegen_type retype in
           let args_str =
@@ -120,7 +120,7 @@ and put_symbol (ident : perkident) (typ : perktype) : unit =
     ()
   with Not_found -> Hashtbl.add symbol_table ident typ
 
-and codegen_program (cmd : command) : string =
+and codegen_program (cmd : command_a) : string =
   let body = codegen_command cmd 0 in
   (* Write includes *)
   String.concat "\n"
@@ -145,9 +145,9 @@ and codegen_program (cmd : command) : string =
     (fun _ v acc -> Printf.sprintf "%s\n%s\n" acc (snd v))
     lambdas_hashmap ""
 
-and codegen_command (cmd : command) (indentation : int) : string =
+and codegen_command (cmd : command_a) (indentation : int) : string =
   let indent_string = String.make (4 * indentation) ' ' in
-  match cmd with
+  match ( $ ) cmd with
   | Archetype (i, l) ->
       let _ = add_archetype i in
       List.iter
@@ -202,11 +202,12 @@ and codegen_command (cmd : command) (indentation : int) : string =
           List.map
             (fun ((typ, id), expr) ->
               let selftype = ([], Pointertype ([], Structtype name, []), []) in
-              match (typ, expr) with
+              match (typ, ( $ ) expr) with
               | ( (attrs, Funtype (params, ret), specs),
                   Lambda (lret, lparams, lexpr) ) ->
                   ( ((attrs, Funtype (selftype :: params, ret), specs), id),
-                    Lambda (lret, (selftype, "self") :: lparams, lexpr) )
+                    annotate_dummy
+                      (Lambda (lret, (selftype, "self") :: lparams, lexpr)) )
               | _ -> ((typ, id), expr))
             defs
         in
@@ -324,7 +325,7 @@ and codegen_command (cmd : command) (indentation : int) : string =
         indent_string name name args_str
   | Return e -> indent_string ^ Printf.sprintf "return %s;" (codegen_expr e)
 
-and codegen_def (t : perkvardesc) (e : expr) : string =
+and codegen_def (t : perkvardesc) (e : expr_a) : string =
   let decl_str = codegen_decl t in
   let expr_str = codegen_expr e in
   Printf.sprintf "%s = %s;" decl_str expr_str
@@ -335,7 +336,7 @@ and codegen_decl (t : perkvardesc) : string =
   Printf.sprintf "%s %s" type_str id
 
 and codegen_fundef (t : perktype) (id : perkident) (args : perkvardesc list)
-    (body : command) : string =
+    (body : command_a) : string =
   let type_str = codegen_type t in
   let args_str =
     String.concat ", "
@@ -382,7 +383,8 @@ and codegen_qual (qual : perktype_qualifier) : string =
   | Volatile -> "volatile"
   | Restrict -> "restrict"
 
-and codegen_expr (e : expr) : string =
+and codegen_expr (e : expr_a) : string =
+  let e = ( $ ) e in
   match e with
   | Int i -> string_of_int i
   | Float f -> string_of_float f
@@ -395,7 +397,7 @@ and codegen_expr (e : expr) : string =
   | Apply (e, args) -> (
       let expr_str = codegen_expr e in
       let args_str = String.concat ", " (List.map codegen_expr args) in
-      match e with
+      match ( $ ) e with
       | Binop (Dot, e1, _) ->
           let e1_str = codegen_expr e1 in
           Printf.sprintf "%s(%s, %s)" expr_str e1_str args_str
@@ -411,7 +413,7 @@ and codegen_expr (e : expr) : string =
   | PostUnop (op, e) ->
       Printf.sprintf "%s%s" (codegen_expr e) (codegen_postunop op)
   | Parenthesised e -> Printf.sprintf "(%s)" (codegen_expr e)
-  | Lambda _ -> e |> get_lambda |> fst
+  | Lambda _ -> e |> annotate_dummy |> get_lambda |> fst
   | Subscript (e1, e2) ->
       Printf.sprintf "%s[%s]" (codegen_expr e1) (codegen_expr e2)
 
