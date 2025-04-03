@@ -20,7 +20,7 @@
 %token Const Volatile Restrict
 %token <string> InlineC
 %token Import Open
-%token Archetype Model Summon
+%token Archetype Model Summon Banish
 
 /* Precedence and associativity specification */
 %left Plus Minus Star Div
@@ -77,12 +77,12 @@ command:
   | Archetype i = Ident LBrace l = perkvardesc_list RBrace                                                 { annotate_2_code $loc (Ast.Archetype (i, l)) }
   | Model i = Ident Colon il = ident_list LBrace l = perkdef_list RBrace                                   { annotate_2_code $loc (Ast.Model (i, il, l)) }
   | Model i = Ident LBrace l = perkdef_list RBrace                                                         { annotate_2_code $loc (Ast.Model (i, [], l)) }
-  | Summon i = Ident Colon typident = Ident LParen l = expr_list RParen                                    { annotate_2_code $loc (Summon (i, typident, l)) }
-  | Summon i = Ident Colon typident = Ident LParen RParen                                                  { annotate_2_code $loc (Summon (i, typident, [])) }
+  | Banish i = Ident                                                                                       { annotate_2_code $loc (Banish i) }
 
 
   | error                                                                                                  { raise (ParseError("command expected")) }
   | command error                                                                                          { raise (ParseError("unexpected command (perhaps you are missing a ';'?)")) }
+  | expr Assign error                                                                                      { raise (ParseError("expression expected on the right hand side of =")) }
   | For LParen command Semicolon expr Semicolon command RParen error                                       { raise (ParseError("missing braces after for guard"))}
   | If LParen expr RParen LBrace command RBrace Else error                                                 { raise (ParseError("missing braces after else"))}
   | If LParen expr RParen error                                                                            { raise (ParseError("missing braces after if guard"))}
@@ -103,6 +103,7 @@ perkfun:
 perkvardesc:
   | i = Ident Colon t = perktype                                                                  { (t, i) }
   | error { raise (ParseError("variable descriptor expected (e.g. banana : int)")) }
+  | Ident error { raise (ParseError("variable descriptor expected (e.g. banana : int)")) }
   
 %inline perkfuntype:
   | t1 = perktype Arrow t2 = perktype                                                    { Ast.Funtype ([t1], t2) }
@@ -123,10 +124,13 @@ expr:
   | i = Ident                                                                                              { annotate_2_code $loc (Ast.Var(i)) }
   | LParen e = expr RParen                                                                                 { annotate_2_code $loc (Ast.Parenthesised e) }
   | e1 = expr LBracket e2 = expr RBracket                                                                  { annotate_2_code $loc (Ast.Subscript (e1, e2)) }
+  | Summon i = Ident LParen l = expr_list RParen                                                           { annotate_2_code $loc (Summon (i, l)) }
+  | Summon i = Ident LParen RParen                                                                         { annotate_2_code $loc (Summon (i, [])) }
 
   | error                                                                                                  { raise (ParseError("expression expected")) }
   | expr error                                                                                             { raise (ParseError("unexpected expression")) }
   | Ident error                                                                                            { raise (ParseError("unexpected expression. Perhaps you tried to use C-style types?")) }
+  | Summon Ident error                                                                                     { raise (ParseError("error while summoning")) }
 
 %inline perktype_attribute:
   | Public                                                                                                 { Ast.Public }

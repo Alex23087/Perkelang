@@ -80,6 +80,7 @@ let rec token lexbuf =
   | "archetype" | "theory" | "interface" | "prototype" | "trait" | "typeclass" -> Archetype  (* TODO reinvent the wheel*)
   | "model" | "impl" | "class"     -> Model
   | "summon"        -> Summon
+  | "banish"        -> Banish
   | "->"            -> Arrow
   | "=>"            -> Bigarrow
   | identifier      -> Ident (Sedlexing.Latin1.lexeme lexbuf)

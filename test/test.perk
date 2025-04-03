@@ -28,7 +28,7 @@ model Bnanana: Superbanana {
         self.altracosa = altracosa;
     },
 
-    let p: Prera = 0
+    let p: Prera = summon Prera()
 };
 
 let counter: int = 0;
@@ -51,7 +51,7 @@ let map : (((int -> int) * int * int*) -> int*) = (f : int -> int, n : int, A : 
 fun main(): int {
     //let new banana: Bnanana(10, 0);
 
-    summon banana : Bnanana(10, 0);
+    let banana: Bnanana = summon Bnanana(10, 0);
 
     let square : int -> int = (a : int): int => {
         return a * a
@@ -71,4 +71,6 @@ fun main(): int {
 
     printf("%d\n", banana.super_palle);
     banana.add(10);
+
+    banish banana;
 }

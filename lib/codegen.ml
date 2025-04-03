@@ -10,10 +10,10 @@ let hashtbl_forall f h = Hashtbl.fold (fun k v acc -> f k v && acc) h true
 let hashtbl_exists f h = Hashtbl.fold (fun k v acc -> f k v || acc) h false
 let fresh_var_counter = ref 0
 
-let fresh_var () : string =
+let fresh_var (s : string) : string =
   let v = !fresh_var_counter in
   fresh_var_counter := v + 1;
-  Printf.sprintf "__perkelang_lambda_%d" v
+  Printf.sprintf "__perkelang_%s_%d" s v
 
 let rec type_descriptor_of_perktype (t : perktype) : string =
   let _, t, _ = t in
@@ -91,7 +91,7 @@ let rec get_function_type (t : perktype) : string * string * string =
 and get_lambda (e : expr_a) : string * string =
   try Hashtbl.find lambdas_hashmap e
   with Not_found ->
-    let id = fresh_var () in
+    let id = fresh_var "lambda" in
     let compiled =
       match ( $ ) e with
       | Lambda (retype, args, body) ->
@@ -198,6 +198,9 @@ and codegen_command (cmd : command_a) (indentation : int) : string =
       if not has_all_the_right_things then
         raise (TypeError "Model does not properly implement Archetype")
       else
+        let constructor =
+          List.find_opt (fun ((_, id), _) -> id = "constructor") defs
+        in
         let defs =
           List.map
             (fun ((typ, id), expr) ->
@@ -232,8 +235,30 @@ and codegen_command (cmd : command_a) (indentation : int) : string =
                            (indent_string ^ "    ") s s)
                        il))
              indent_string name name);
-        Printf.sprintf "%svoid %s_init(struct %s* obj) {\n%s\n}\n" indent_string
-          name name
+        let params_str_with_types, params_str =
+          match constructor with
+          | None -> ("", "")
+          | Some ((typ, _), _) -> (
+              match typ with
+              | _, Funtype (params, _), _ ->
+                  ( String.concat ", "
+                      (List.mapi
+                         (fun (i : int) (t : perktype) ->
+                           Printf.sprintf "%s arg_%d" (codegen_type t) i)
+                         params),
+                    String.concat ", "
+                      (List.mapi (fun i _ -> Printf.sprintf "arg_%d" i) params)
+                  )
+              | _ -> raise (TypeError "Constructor is not a function type"))
+          (* TODO: Add error locations *)
+        in
+        Printf.sprintf
+          "%s%s %s_init(%s) {\n\
+          \    %s%s obj = malloc(sizeof(struct %s));\n\
+           %s\n\
+           %s    %sreturn obj;\n\
+           }\n"
+          indent_string name name params_str_with_types indent_string name name
           (if List.length mems = 0 then ""
            else
              indent_string ^ "    "
@@ -245,6 +270,12 @@ and codegen_command (cmd : command_a) (indentation : int) : string =
                         (codegen_expr expr))
                     defs)
              ^ ";")
+          (match constructor with
+          | None -> ""
+          | Some _ ->
+              Printf.sprintf "%s    obj->constructor(obj, %s);\n" indent_string
+                params_str)
+          indent_string
   | InlineC s -> s
   | Block c ->
       indent_string ^ "{\n"
@@ -314,15 +345,10 @@ and codegen_command (cmd : command_a) (indentation : int) : string =
   | Import lib ->
       add_import lib;
       ""
-  | Summon (name, typident, args) ->
-      let args_str = String.concat ", " (List.map codegen_expr args) in
-      (* Printf.sprintf "%sstruct %s %s;\n%s%s_init(&%s);\n%s%s.constructor((void*)&%s, %s);" indent_string typident name indent_string typident name indent_string name name args_str *)
-      Printf.sprintf
-        "%s%s %s = malloc(sizeof(struct %s));\n\
-         %s%s_init(%s);\n\
-         %s%s->constructor((void*)%s, %s);"
-        indent_string typident name typident indent_string typident name
-        indent_string name name args_str
+  | Banish name ->
+      (* TODO: Automatically banish children *)
+      Printf.sprintf "%sfree(%s);\n%s%s = NULL;" indent_string name
+        indent_string name
   | Return e -> indent_string ^ Printf.sprintf "return %s;" (codegen_expr e)
 
 and codegen_def (t : perkvardesc) (e : expr_a) : string =
@@ -416,6 +442,10 @@ and codegen_expr (e : expr_a) : string =
   | Lambda _ -> e |> annotate_dummy |> get_lambda |> fst
   | Subscript (e1, e2) ->
       Printf.sprintf "%s[%s]" (codegen_expr e1) (codegen_expr e2)
+  | Summon (typident, args) ->
+      let args_str = String.concat ", " (List.map codegen_expr args) in
+      (* Printf.sprintf "%sstruct %s %s;\n%s%s_init(&%s);\n%s%s.constructor((void*)&%s, %s);" indent_string typident name indent_string typident name indent_string name name args_str *)
+      Printf.sprintf "%s_init(%s)" typident args_str
 
 and codegen_binop (op : binop) : string =
   match op with

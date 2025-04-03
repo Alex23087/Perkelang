@@ -107,6 +107,7 @@ and expr_t =
   | PostUnop of postunop * expr_a
   | Parenthesised of expr_a
   | Subscript of expr_a * expr_a
+  | Summon of perkident * expr_a list
 [@@deriving show]
 
 (* Syntax of the language *)
@@ -132,7 +133,7 @@ and command_t =
   | Skip
   | Archetype of perkident * perkdecl list
   | Model of perkident * perkident list * perkdef list
-  | Summon of perkident * perkident * expr_a list
+  | Banish of perkident
   | Return of expr_a
 [@@deriving show]
 
