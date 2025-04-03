@@ -1,0 +1,29 @@
+ {
+  "name": "perkelang-syntax",
+  "displayName": "Perkelang Syntax",
+  "description": "Syntax highlighting for the Perkelang language",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.50.0"
+  },
+  "categories": [
+    "Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "perkelang",
+        "extensions": [ ".perk" ],
+        "aliases": ["Perkelang"]
+      }
+    ],
+    "grammars": [
+      {
+        "language": "perkelang",
+        "scopeName": "source.perkelang",
+        "path": "./syntaxes/perkelang.tmLanguage.json"
+      }
+    ]
+  }
+}
+

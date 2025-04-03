@@ -1,0 +1,113 @@
+{
+  "scopeName": "source.perkelang",
+  "name": "Perkelang",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#functions" },
+    { "include": "#embedded-c" },
+    { "include": "#lambdas" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.perkelang",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.perkelang",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.perkelang",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.perkelang",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.perkelang",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.perkelang",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.perkelang",
+          "match": "\\b\\d+(?:\\.\\d+)?\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.perkelang",
+          "match": "\\b(let|import|archetype|model|fun|for|while|do|if|else|return|summon)\\b"
+        },
+        {
+          "name": "keyword.other.begin-c.perkelang",
+          "match": "\\bBEGIN_C\\b"
+        },
+        {
+          "name": "keyword.other.end-c.perkelang",
+          "match": "\\bEND_C\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.perkelang",
+          "match": "\\b(int|void|uint8_t|float|double)\\b"
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "name": "entity.name.function.definition.perkelang",
+          "match": "\\bfun\\s+(\\w+)"
+        },
+        {
+          "name": "entity.name.function.perkelang",
+          "match": "\\blet\\s+(\\w+)\\s*:"
+        }
+      ]
+    },
+    "embedded-c": {
+      "patterns": [
+        {
+          "name": "source.c.embedded.perkelang",
+          "begin": "\\bBEGIN_C\\b",
+          "end": "\\bEND_C\\b",
+          "patterns": [
+            {
+              "include": "source.c"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
