@@ -7,7 +7,8 @@
 %token EOF
 %token Plus Eq Lt Leq Gt Geq Minus Star Div Ampersand PlusPlus MinusMinus Dot
 %token Fun Assign If Else While Do For
-%token <int> Number
+%token <int> Integer
+%token <float> Float
 %token <char> Character
 %token <string> String
 %token <string> Ident
@@ -115,7 +116,8 @@ expr:
   | e = expr u = postunop                                                                                  { Ast.PostUnop (u, e) }
   | LParen id_list = perkvardesc_list RParen Colon ret = perktype_complete Bigarrow LBrace c = command RBrace       { Ast.Lambda (ret, id_list, c) }
   | LParen RParen Colon ret = perktype_complete Bigarrow LBrace c = command RBrace                                  { Ast.Lambda (ret, [], c) }
-  | n = Number                                                                                             { Ast.Int (n) }
+  | n = Integer                                                                                            { Ast.Int (n) }
+  | f = Float                                                                                              { Ast.Float (f) }
   | c = Character                                                                                          { Ast.Char (c) }
   | s = String                                                                                             { Ast.String (s) }
   | i = Ident                                                                                              { Ast.Var(i) }
@@ -145,7 +147,7 @@ perktype_complete:
 perktype:
   | i = Ident                                                                                              { Ast.Basetype i }
   | LBracket t = perktype_complete RBracket                                                                { Ast.Arraytype (t, None) }
-  | LBracket t = perktype_complete n = Number RBracket                                                     { Ast.Arraytype (t, Some n) }
+  | LBracket t = perktype_complete n = Integer RBracket                                                    { Ast.Arraytype (t, Some n) }
   | t = perktype_complete Star                                                                             { Ast.Pointertype t }
   | error                                                                                                  { raise (ParseError("type expected")) }
 

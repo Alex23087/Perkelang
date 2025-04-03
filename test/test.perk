@@ -18,8 +18,9 @@ model Prera {
 };
 
 model Bnanana: Superbanana {
-    let super_palle: int = 0,
+    let super_palle: int = 0o100,
     let altracosa : int = 0,
+    let terza_cosa: float = .9,
 
     let add: int -> int = (x: int): int => {x + 5},
     let constructor: (int * int) -> void = (super_palle: int, altracosa: int): void => {

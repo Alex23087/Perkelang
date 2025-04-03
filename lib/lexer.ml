@@ -5,8 +5,10 @@ let string_buffer = Buffer.create 512
 
 let digit = [%sedlex.regexp? '0' .. '9']
 let hex_digit = [%sedlex.regexp? '0' .. '9' | 'a' .. 'f' | 'A' .. 'F']
-let hexNumber = [%sedlex.regexp? Plus hex_digit]
-let number = [%sedlex.regexp? Plus digit]
+let hex_number = [%sedlex.regexp? Plus hex_digit]
+let dec_number = [%sedlex.regexp? Plus digit]
+let oct_number = [%sedlex.regexp? Plus ('0' .. '7')]
+let float_number = [%sedlex.regexp? (Plus digit, '.', Star digit) | (Star digit, '.', Plus digit)] (* Allow for numbers all of the following formats: 0.5, .5, 1. *)
 let character = [%sedlex.regexp? 0x20 .. 0x7E]
 let identifier = [%sedlex.regexp? ('a'..'z' | 'A'..'Z' | '_') , Star ('a'..'z' | 'A'..'Z' | digit | '_')]
 let white_space = [%sedlex.regexp? ' ' | '\t' | '\n' | '\r']
@@ -73,16 +75,19 @@ let rec token lexbuf =
   | "restrict"      -> Restrict
   | "import"        -> Import
   | "open"          -> Open
-  | "true"          -> Number 1
-  | "false"         -> Number 0
+  | "true"          -> Integer 1
+  | "false"         -> Integer 0
   | "archetype" | "theory" | "interface" | "prototype" | "trait" | "typeclass" -> Archetype  (* TODO reinvent the wheel*)
   | "model" | "impl" | "class"     -> Model
   | "summon"        -> Summon
   | "->"            -> Arrow
   | "=>"            -> Bigarrow
   | identifier      -> Ident (Sedlexing.Latin1.lexeme lexbuf)
-  | number          -> Number (int_of_string (Sedlexing.Latin1.lexeme lexbuf))
-  | "0x", hexNumber -> Number (int_of_string ("0x" ^ (let x = Sedlexing.Latin1.lexeme lexbuf in String.sub x 2 (String.length x))))
+  | "0x", hex_number -> Integer (int_of_string (Sedlexing.Latin1.lexeme lexbuf))
+  | "0b", (Plus ('0' | '1')) -> Integer (int_of_string (Sedlexing.Latin1.lexeme lexbuf))
+  | "0o", oct_number -> Integer (int_of_string ("0o" ^ (let s = (Sedlexing.Latin1.lexeme lexbuf) in String.sub s 2 (String.length s - 2))))  
+  | dec_number      -> Integer (int_of_string (Sedlexing.Latin1.lexeme lexbuf))
+  | float_number    -> Float (float_of_string (Sedlexing.Latin1.lexeme lexbuf))
   | "'"             -> char lexbuf
   | '"'             -> (
     Buffer.clear string_buffer;

@@ -54,8 +54,24 @@
     "numbers": {
       "patterns": [
         {
+          "name": "constant.numeric.hex.perkelang",
+          "match": "\\b0x[0-9a-fA-F]+\\b"
+        },
+        {
+          "name": "constant.numeric.octal.perkelang",
+          "match": "\\b0o[0-7]+\\b"
+        },
+        {
+          "name": "constant.numeric.binary.perkelang",
+          "match": "\\b0b[01]+\\b"
+        },
+        {
+          "name": "constant.numeric.float.perkelang",
+          "match": "\\b\\d+\\.\\d+\\b"
+        },
+        {
           "name": "constant.numeric.perkelang",
-          "match": "\\b\\d+(?:\\.\\d+)?\\b"
+          "match": "\\b\\d+\\b"
         }
       ]
     },

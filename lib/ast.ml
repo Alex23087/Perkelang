@@ -1,11 +1,17 @@
+type 'a annotated = {
+  field1 : int;
+  field2 : string;
+}
+[@@deriving show]
+
 type perkident = string
 [@@deriving show]
 
 type perktype_attribute =
-  | Public
-  | Private
-  | Static
-  | Extern
+| Public
+| Private
+| Static
+| Extern
 [@@deriving show]
 
 type perktype_qualifier =
@@ -55,6 +61,7 @@ and perkfun = Fun of perktype_complete * perkident * (perkvardesc list) * comman
 
 and expr = 
   | Int of int
+  | Float of float
   | Char of char
   | String of string
   | Pointer of expr

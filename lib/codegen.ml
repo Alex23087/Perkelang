@@ -390,6 +390,7 @@ and codegen_qual (qual : perktype_qualifier) : string =
 and codegen_expr (e : expr) : string =
   match e with
   | Int i -> string_of_int i
+  | Float f -> string_of_float f
   | Char c -> Printf.sprintf "'%c'" c
   | String s -> Printf.sprintf "\"%s\"" (String.escaped s)
   | Pointer e ->
