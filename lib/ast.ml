@@ -1,17 +1,24 @@
 type 'a annotated = {
-  field1 : int;
-  field2 : string;
+  loc : Location.location; [@opaque]
+  node : 'a;
 }
 [@@deriving show]
 
-type perkident = string
-[@@deriving show]
+let ( @ ) (annotated_node : 'a annotated) : Location.location =
+  annotated_node.loc
+
+let ( $ ) (annotated_node : 'a annotated) : 'a = annotated_node.node
+
+let annotate (node : 'a) (loc : Location.location) : 'a annotated =
+  { loc; node }
+
+type perkident = string [@@deriving show]
 
 type perktype_attribute =
-| Public
-| Private
-| Static
-| Extern
+  | Public
+  | Private
+  | Static
+  | Extern
 [@@deriving show]
 
 type perktype_qualifier =
@@ -21,17 +28,23 @@ type perktype_qualifier =
 [@@deriving show]
 
 (* type of the perk -- giangpt *)
-type perktype = Basetype of string | Funtype of (perktype_complete list) * perktype_complete | Pointertype of perktype_complete | Arraytype of perktype_complete * (int option) | Classtype of string | Structtype of string
+type perktype_partial =
+  | Basetype of string
+  | Funtype of perktype list * perktype
+  | Pointertype of perktype
+  | Arraytype of perktype * int option
+  | Classtype of string
+  | Structtype of string
 [@@deriving show]
 
-and perktype_complete = perktype_attribute list * perktype * perktype_qualifier list
+and perktype =
+  perktype_attribute list * perktype_partial * perktype_qualifier list
 [@@deriving show]
 
-type perkvardesc = perktype_complete * perkident
-[@@deriving show]
+(* and perktype_annotated = perktype annotated [@@deriving show] *)
 
-type perkdecl = perkvardesc
-[@@deriving show]
+type perkvardesc = perktype * perkident [@@deriving show]
+type perkdecl = perkvardesc [@@deriving show]
 
 type binop =
   | Add
@@ -47,43 +60,53 @@ type binop =
 (*  ... boolean and bitwise ops and all that  *)
 [@@deriving show]
 
-type preunop = Neg | Not | Dereference | Reference | PreIncrement | PreDecrement [@@deriving show]
+type preunop =
+  | Neg
+  | Not
+  | Dereference
+  | Reference
+  | PreIncrement
+  | PreDecrement
+[@@deriving show]
 
-type postunop = PostIncrement | PostDecrement [@@deriving show]
+type postunop =
+  | PostIncrement
+  | PostDecrement
+[@@deriving show]
 
 type perkdef = perkdecl * expr [@@deriving show]
-  
-(* return, name, args, body *)
-and perkfun = Fun of perktype_complete * perkident * (perkvardesc list) * command [@@deriving show]
 
 (* name, attributes, methods *)
 (* and perklass = Class of perkident * (perkdef list) * (perkfun list) [@@deriving show] *)
-
-and expr = 
+and expr =
   | Int of int
   | Float of float
   | Char of char
   | String of string
   | Pointer of expr
   | Var of perkident
-    (* classname, identifier *)
+  (* classname, identifier *)
   (* | Ob of string * int *)
-  | Apply of expr * (expr list)
+  | Apply of expr * expr list
   | Binop of binop * expr * expr
   | PreUnop of preunop * expr
-  | Lambda of perktype_complete * (perkvardesc list) * command
+  | Lambda of perktype * perkvardesc list * command
   | PostUnop of postunop * expr
   | Parenthesised of expr
   | Subscript of expr * expr
-  [@@deriving show]
-  
+[@@deriving show]
+
 (* Syntax of the language *)
 and command =
   | Import of string
   | InlineC of string
   | Block of command
   | Def of perkdef
-  | Fundef of perkfun
+  | Fundef of
+      perktype
+      * perkident
+      * perkvardesc list
+      * command (* return, name, args, body *)
   (* | Classdecl of perklass *)
   | Assign of (expr * expr)
   | Seq of command * command
@@ -98,4 +121,4 @@ and command =
   | Model of perkident * perkident list * perkdef list
   | Summon of perkident * perkident * expr list
   | Return of expr
-  [@@deriving show]
+[@@deriving show]

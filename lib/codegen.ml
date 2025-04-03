@@ -15,7 +15,7 @@ let fresh_var () : string =
   fresh_var_counter := v + 1;
   Printf.sprintf "__perkelang_lambda_%d" v
 
-let rec type_descriptor_of_perktype (t : perktype_complete) : string =
+let rec type_descriptor_of_perktype (t : perktype) : string =
   let _, t, _ = t in
   match t with
   | Basetype s -> s
@@ -29,16 +29,14 @@ let rec type_descriptor_of_perktype (t : perktype_complete) : string =
   | Arraytype (t, _) -> Printf.sprintf "%s_arr" (type_descriptor_of_perktype t)
   | Classtype s -> s
 
-let function_type_hashmap :
-    (perktype_complete, string * string * string) Hashtbl.t =
+let function_type_hashmap : (perktype, string * string * string) Hashtbl.t =
   Hashtbl.create 10
 
 let lambdas_hashmap : (expr, string * string) Hashtbl.t = Hashtbl.create 10
-let symbol_table : (perkident, perktype_complete) Hashtbl.t = Hashtbl.create 10
+let symbol_table : (perkident, perktype) Hashtbl.t = Hashtbl.create 10
 let import_list : string list ref = ref []
 
-let archetype_hashtable :
-    (string, (string, perktype_complete) Hashtbl.t) Hashtbl.t =
+let archetype_hashtable : (string, (string, perktype) Hashtbl.t) Hashtbl.t =
   Hashtbl.create 10
 
 let struct_def_list : string list ref = ref []
@@ -46,25 +44,25 @@ let struct_def_list : string list ref = ref []
 let add_struct_def (code : string) : unit =
   struct_def_list := code :: !struct_def_list
 
-let add_archetype (name : string) : (string, perktype_complete) Hashtbl.t =
+let add_archetype (name : string) : (string, perktype) Hashtbl.t =
   let new_archetype = Hashtbl.create 10 in
   Hashtbl.add archetype_hashtable name new_archetype;
   new_archetype
 
-let get_archetype (name : string) : (string, perktype_complete) Hashtbl.t =
+let get_archetype (name : string) : (string, perktype) Hashtbl.t =
   try Hashtbl.find archetype_hashtable name
   with Not_found ->
     raise (TypeError (Printf.sprintf "Archetype %s not found" name))
 
-let add_binding_to_archetype (name : string) (id : perkident)
-    (typ : perktype_complete) : unit =
+let add_binding_to_archetype (name : string) (id : perkident) (typ : perktype) :
+    unit =
   let archetype = get_archetype name in
   if not (Hashtbl.mem archetype id) then Hashtbl.add archetype id typ
 
 let add_import (lib : string) : unit =
   if not (List.mem lib !import_list) then import_list := lib :: !import_list
 
-let rec get_function_type (t : perktype_complete) : string * string * string =
+let rec get_function_type (t : perktype) : string * string * string =
   try Hashtbl.find function_type_hashmap t
   with Not_found -> (
     let _, t', _ = t in
@@ -116,7 +114,7 @@ and get_lambda (e : expr) : string * string =
     Hashtbl.add lambdas_hashmap e (id, compiled);
     (id, compiled)
 
-and put_symbol (ident : perkident) (typ : perktype_complete) : unit =
+and put_symbol (ident : perkident) (typ : perktype) : unit =
   try
     let _ = Hashtbl.find symbol_table ident in
     ()
@@ -141,7 +139,8 @@ and codegen_program (cmd : command) : string =
       (fun id typ acc -> Printf.sprintf "%s%s;\n" acc (codegen_fundecl id typ))
       symbol_table ""
   ^ "\n" ^ body ^ "\n"
-  ^ (* Write lambdas *)
+  ^
+  (* Write lambdas *)
   Hashtbl.fold
     (fun _ v acc -> Printf.sprintf "%s\n%s\n" acc (snd v))
     lambdas_hashmap ""
@@ -202,9 +201,7 @@ and codegen_command (cmd : command) (indentation : int) : string =
         let defs =
           List.map
             (fun ((typ, id), expr) ->
-              let selftype =
-                ([], Pointertype ([], Structtype name, []), [])
-              in
+              let selftype = ([], Pointertype ([], Structtype name, []), []) in
               match (typ, expr) with
               | ( (attrs, Funtype (params, ret), specs),
                   Lambda (lret, lparams, lexpr) ) ->
@@ -215,7 +212,8 @@ and codegen_command (cmd : command) (indentation : int) : string =
         in
         let mems = List.map (fun ((typ, id), _) -> (typ, id)) defs in
         add_struct_def
-          (Printf.sprintf "%sstruct %s {\n%s%s\n};\n%stypedef struct %s* %s;\n" indent_string name 
+          (Printf.sprintf "%sstruct %s {\n%s%s\n};\n%stypedef struct %s* %s;\n"
+             indent_string name
              (if List.length mems = 0 then ""
               else
                 (indent_string ^ "    "
@@ -225,15 +223,14 @@ and codegen_command (cmd : command) (indentation : int) : string =
                 ^ ";")
              (if List.length il = 0 then ""
               else
-                "\n\n" ^ String.concat "\n"
-                  (List.map
-                     (fun s ->
-                       Printf.sprintf "%sstruct %s %s;" (indent_string ^ "    ")
-                         s s)
-                     il))
-              indent_string
-              name name
-                     );
+                "\n\n"
+                ^ String.concat "\n"
+                    (List.map
+                       (fun s ->
+                         Printf.sprintf "%sstruct %s %s;"
+                           (indent_string ^ "    ") s s)
+                       il))
+             indent_string name name);
         Printf.sprintf "%svoid %s_init(struct %s* obj) {\n%s\n}\n" indent_string
           name name
           (if List.length mems = 0 then ""
@@ -243,7 +240,8 @@ and codegen_command (cmd : command) (indentation : int) : string =
                  (";\n" ^ indent_string ^ "    ")
                  (List.map
                     (fun ((typ, id), expr) ->
-                      Printf.sprintf "obj->%s = (%s) %s" id (codegen_type typ) (codegen_expr expr))
+                      Printf.sprintf "obj->%s = (%s) %s" id (codegen_type typ)
+                        (codegen_expr expr))
                     defs)
              ^ ";")
   | InlineC s -> s
@@ -252,20 +250,16 @@ and codegen_command (cmd : command) (indentation : int) : string =
       ^ codegen_command c (indentation + 1)
       ^ "\n" ^ indent_string ^ "}"
   | Def (t, e) -> indent_string ^ codegen_def t e
-  | Fundef (Fun (t, id, args, body)) ->
-      indent_string ^ codegen_fundef t id args body
+  | Fundef (t, id, args, body) -> indent_string ^ codegen_fundef t id args body
   | Assign (l, r) ->
       indent_string
       ^ Printf.sprintf "%s = %s;" (codegen_expr l) (codegen_expr r)
   | Seq (c1, c2) ->
       let c1_code = codegen_command c1 indentation in
       let c2_code = codegen_command c2 indentation in
-      if String.length c1_code = 0 then
-        Printf.sprintf "%s" c2_code
-      else if String.length c2_code = 0 then
-        Printf.sprintf "%s" c1_code
-      else
-        Printf.sprintf "%s\n%s" c1_code c2_code
+      if String.length c1_code = 0 then Printf.sprintf "%s" c2_code
+      else if String.length c2_code = 0 then Printf.sprintf "%s" c1_code
+      else Printf.sprintf "%s\n%s" c1_code c2_code
   | IfThenElse (e, c1, c2) ->
       indent_string
       ^ Printf.sprintf "if (%s) {\n%s\n%s} else {\n%s\n%s}" (codegen_expr e)
@@ -319,14 +313,15 @@ and codegen_command (cmd : command) (indentation : int) : string =
   | Import lib ->
       add_import lib;
       ""
-  | Summon (name, typident, args) -> (
-    let args_str = 
-      String.concat ", "
-        (List.map
-           codegen_expr args) in
-    (* Printf.sprintf "%sstruct %s %s;\n%s%s_init(&%s);\n%s%s.constructor((void*)&%s, %s);" indent_string typident name indent_string typident name indent_string name name args_str *)
-    Printf.sprintf "%s%s %s = malloc(sizeof(struct %s));\n%s%s_init(%s);\n%s%s->constructor((void*)%s, %s);" indent_string typident name typident indent_string typident name indent_string name name args_str
-  )
+  | Summon (name, typident, args) ->
+      let args_str = String.concat ", " (List.map codegen_expr args) in
+      (* Printf.sprintf "%sstruct %s %s;\n%s%s_init(&%s);\n%s%s.constructor((void*)&%s, %s);" indent_string typident name indent_string typident name indent_string name name args_str *)
+      Printf.sprintf
+        "%s%s %s = malloc(sizeof(struct %s));\n\
+         %s%s_init(%s);\n\
+         %s%s->constructor((void*)%s, %s);"
+        indent_string typident name typident indent_string typident name
+        indent_string name name args_str
   | Return e -> indent_string ^ Printf.sprintf "return %s;" (codegen_expr e)
 
 and codegen_def (t : perkvardesc) (e : expr) : string =
@@ -339,8 +334,8 @@ and codegen_decl (t : perkvardesc) : string =
   let type_str = codegen_type t in
   Printf.sprintf "%s %s" type_str id
 
-and codegen_fundef (t : perktype_complete) (id : perkident)
-    (args : perkvardesc list) (body : command) : string =
+and codegen_fundef (t : perktype) (id : perkident) (args : perkvardesc list)
+    (body : command) : string =
   let type_str = codegen_type t in
   let args_str =
     String.concat ", "
@@ -353,7 +348,7 @@ and codegen_fundef (t : perktype_complete) (id : perkident)
   put_symbol id funtype;
   Printf.sprintf "%s %s(%s) {\n%s\n}" type_str id args_str body_str
 
-and codegen_type ?(expand : bool = false) (t : perktype_complete) : string =
+and codegen_type ?(expand : bool = false) (t : perktype) : string =
   let attrs, t', quals = t in
   let attrs_str = String.concat " " (List.map codegen_attr attrs) in
   let quals_str = String.concat " " (List.map codegen_qual quals) in
@@ -397,15 +392,14 @@ and codegen_expr (e : expr) : string =
       let code = codegen_expr e in
       Printf.sprintf "*%s" code
   | Var id -> id
-  | Apply (e, args) ->
+  | Apply (e, args) -> (
       let expr_str = codegen_expr e in
       let args_str = String.concat ", " (List.map codegen_expr args) in
-      (match e with
+      match e with
       | Binop (Dot, e1, _) ->
-        let e1_str = codegen_expr e1 in
+          let e1_str = codegen_expr e1 in
           Printf.sprintf "%s(%s, %s)" expr_str e1_str args_str
-      | _ -> Printf.sprintf "%s(%s)" expr_str args_str
-      )
+      | _ -> Printf.sprintf "%s(%s)" expr_str args_str)
   | Binop (Dot, e1, e2) ->
       Printf.sprintf "%s%s%s" (codegen_expr e1) (codegen_binop Dot)
         (codegen_expr e2)
@@ -446,7 +440,7 @@ and codegen_preunop (op : preunop) : string =
 and codegen_postunop (op : postunop) : string =
   match op with PostIncrement -> "++" | PostDecrement -> "--"
 
-and codegen_fundecl (id : perkident) (typ : perktype_complete) : string =
+and codegen_fundecl (id : perkident) (typ : perktype) : string =
   let attrs, t, _ = typ in
   let attrs_str = String.concat " " (List.map codegen_attr attrs) in
   let type_str =

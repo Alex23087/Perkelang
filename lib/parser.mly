@@ -35,16 +35,15 @@
 %type <Ast.command> command
 %type <Ast.perkdef> perkdef
 %type <Ast.perkvardesc> perkvardesc
-%type <Ast.perkfun> perkfun
-%type <Ast.perktype_complete> perktype_complete
+%type <Ast.command> perkfun
 %type <Ast.perktype> perktype
-%type <Ast.perktype> perkfuntype
+%type <Ast.perktype_partial> perkfuntype
 %type <Ast.binop> binop
 %type <Ast.preunop> preunop
 %type <Ast.postunop> postunop
 %type <Ast.expr> expr
 %type <Ast.perkident list> ident_list
-%type <Ast.perktype_complete list> perktype_list
+%type <Ast.perktype list> perktype_list
 
 // %on_error_reduce command
 
@@ -60,7 +59,7 @@ command:
   | Open i = String                                                                                        { Ast.Import ("\"" ^ i ^ "\"") }
   | ic = InlineC                                                                                           { Ast.InlineC(ic) }
   | d = perkdef                                                                                            { Ast.Def d }
-  | Fun pf = perkfun                                                                                       { Ast.Fundef pf }
+  | Fun pf = perkfun                                                                                       { pf }
   | l = expr Assign r = expr                                                                               { Ast.Assign (l, r) }
   | If LParen e = expr RParen LBrace c1 = command RBrace Else LBrace c2 = command RBrace                   { Ast.IfThenElse (e, c1, c2) }
   | If LParen e = expr RParen LBrace c1 = command RBrace                                                   { Ast.IfThenElse (e, c1, Ast.Skip) }
@@ -96,17 +95,17 @@ perkdef:
   | error { raise (ParseError("definition expected (e.g. let banana : int = 5)")) }
 
 perkfun:
-  | i = Ident LParen id_list = perkvardesc_list RParen Colon rt = perktype_complete LBrace c = command RBrace       { Ast.Fun (rt, i, id_list, c) }
-  | i = Ident LParen RParen Colon rt = perktype_complete LBrace c = command RBrace                                  { Ast.Fun (rt, i, [], c) }
+  | i = Ident LParen id_list = perkvardesc_list RParen Colon rt = perktype LBrace c = command RBrace       { Ast.Fundef (rt, i, id_list, c) }
+  | i = Ident LParen RParen Colon rt = perktype LBrace c = command RBrace                                  { Ast.Fundef (rt, i, [], c) }
   
 
 perkvardesc:
-  | i = Ident Colon t = perktype_complete                                                                  { (t, i) }
+  | i = Ident Colon t = perktype                                                                  { (t, i) }
   | error { raise (ParseError("variable descriptor expected (e.g. banana : int)")) }
   
 %inline perkfuntype:
-  | t1 = perktype_complete Arrow t2 = perktype_complete                                                    { Ast.Funtype ([t1], t2) }
-  | LParen tl = perktype_list RParen Arrow tf = perktype_complete                                          { Ast.Funtype (tl, tf) }
+  | t1 = perktype Arrow t2 = perktype                                                    { Ast.Funtype ([t1], t2) }
+  | LParen tl = perktype_list RParen Arrow tf = perktype                                          { Ast.Funtype (tl, tf) }
 
 expr:
   | Star e = expr                                                                                          { Ast.Pointer e }
@@ -114,8 +113,8 @@ expr:
   | e1 = expr b = binop e2 = expr                                                                          { Ast.Binop (b, e1, e2) }
   | u = preunop e = expr                                                                                   { Ast.PreUnop (u, e) }
   | e = expr u = postunop                                                                                  { Ast.PostUnop (u, e) }
-  | LParen id_list = perkvardesc_list RParen Colon ret = perktype_complete Bigarrow LBrace c = command RBrace       { Ast.Lambda (ret, id_list, c) }
-  | LParen RParen Colon ret = perktype_complete Bigarrow LBrace c = command RBrace                                  { Ast.Lambda (ret, [], c) }
+  | LParen id_list = perkvardesc_list RParen Colon ret = perktype Bigarrow LBrace c = command RBrace       { Ast.Lambda (ret, id_list, c) }
+  | LParen RParen Colon ret = perktype Bigarrow LBrace c = command RBrace                                  { Ast.Lambda (ret, [], c) }
   | n = Integer                                                                                            { Ast.Int (n) }
   | f = Float                                                                                              { Ast.Float (f) }
   | c = Character                                                                                          { Ast.Char (c) }
@@ -138,17 +137,17 @@ expr:
   | Volatile                                                                                               { Ast.Volatile }
   | Restrict                                                                                               { Ast.Restrict }
 
-perktype_complete:
-  | t = perktype q = list(perktype_qualifier)                                                              { ([], t, q) }
+perktype:
+  | t = perktype_partial q = list(perktype_qualifier)                                                              { ([], t, q) }
   | t = perkfuntype q = list(perktype_qualifier)                                                           { ([], t, q) }
-  | LParen t = perktype_complete RParen                                                                    { t }
+  | LParen t = perktype RParen                                                                    { t }
   | error                                                                                                  { raise (ParseError("type expected")) }
 
-perktype:
+perktype_partial:
   | i = Ident                                                                                              { Ast.Basetype i }
-  | LBracket t = perktype_complete RBracket                                                                { Ast.Arraytype (t, None) }
-  | LBracket t = perktype_complete n = Integer RBracket                                                    { Ast.Arraytype (t, Some n) }
-  | t = perktype_complete Star                                                                             { Ast.Pointertype t }
+  | LBracket t = perktype RBracket                                                                { Ast.Arraytype (t, None) }
+  | LBracket t = perktype n = Integer RBracket                                                    { Ast.Arraytype (t, Some n) }
+  | t = perktype Star                                                                             { Ast.Pointertype t }
   | error                                                                                                  { raise (ParseError("type expected")) }
 
 %inline binop:
@@ -190,10 +189,10 @@ ident_list:
   | Ident error { raise (ParseError("unexpected identifier")) }
 
 perktype_list:
-  | t = perktype_complete { [t] }
-  | tl = perktype_complete Star t = perktype_list { tl :: t }
+  | t = perktype { [t] }
+  | tl = perktype Star t = perktype_list { tl :: t }
   | error { raise (ParseError("type expected")) }
-  | perktype_complete error { raise (ParseError("unexpected type")) }
+  | perktype error { raise (ParseError("unexpected type")) }
 
 perkdef_list:
   | t = perkdef { [t] }

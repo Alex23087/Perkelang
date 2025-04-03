@@ -12,6 +12,7 @@ build:
 clean:
 	rm -rf build
 	opam exec dune clean
+	rm -f test/test.out test/test.c
 
 .PHONY: deps
 deps:
