@@ -1,4 +1,5 @@
 open Ast
+open Errors
 
 exception TypeError of string
 
@@ -32,6 +33,7 @@ let rec type_descriptor_of_perktype (t : perktype) : string =
       (* This is probably problematic, cannot define function pointers with ... . Nvm, apparently you can 😕*)
   | ArcheType (name, _decls) -> name
   | Modeltype (name, _archs, _decls, _constr_params) -> name
+  | Infer -> failwith "Impossible: type has not been inferred"
 
 let function_type_hashmap : (perktype, string * string * string) Hashtbl.t =
   Hashtbl.create 10
@@ -187,20 +189,33 @@ and codegen_command (cmd : command_a) (indentation : int) : string =
       ""
   | Model (name, il, defs) ->
       let mems = List.map (fun ((typ, id), _) -> (typ, id)) defs in
-      let archetypes = List.map get_archetype il in
+      let archetypes = List.map (fun n -> (n, get_archetype n)) il in
       let archetype_decls =
         List.map
-          (fun h -> Hashtbl.fold (fun k v acc -> (k, v) :: acc) h [])
+          (fun (n, h) -> Hashtbl.fold (fun k v acc -> (v, k, n) :: acc) h [])
           archetypes
       in
       let archetype_decls = List.flatten archetype_decls in
+      let missing_decl_name = ref ("", "") in
       let (*theorem: *) has_all_the_right_things =
         List.for_all
-          (fun dec -> List.mem dec mems)
-          (List.map swizzle archetype_decls)
+          (fun (typ, id, arch) ->
+            if List.mem (typ, id) mems then true
+            else (
+              missing_decl_name := (arch, id);
+              false))
+          archetype_decls
       in
       if not has_all_the_right_things then
-        raise (TypeError "Model does not properly implement Archetype")
+        let line, col = (( @@ ) cmd).start_pos in
+        raise
+          (Type_error
+             ( line,
+               col,
+               Printf.sprintf
+                 "Model %s does not properly implement Archetype %s: missing \
+                  declaration for %s"
+                 name (fst !missing_decl_name) (snd !missing_decl_name) ))
       else
         let constructor =
           List.find_opt (fun ((_, id), _) -> id = "constructor") defs
@@ -402,6 +417,7 @@ and codegen_type ?(expand : bool = false) (t : perktype) : string =
     | Vararg -> "..."
     | Modeltype (name, _archs, _decls, _constr_params) -> name
     | ArcheType (name, _decls) -> name
+    | Infer -> failwith "Impossible: type has not been inferred"
   in
   if attrs_str = "" && quals_str = "" then type_str
   else if attrs_str = "" then Printf.sprintf "%s %s" quals_str type_str
@@ -409,10 +425,7 @@ and codegen_type ?(expand : bool = false) (t : perktype) : string =
   else Printf.sprintf "%s %s %s" attrs_str quals_str type_str
 
 and codegen_attr (attr : perktype_attribute) : string =
-  match attr with
-  | Public -> "public"
-  | Private -> "private"
-  | Static -> "static"
+  match attr with Public -> "" | Private -> "static" | Static -> "static"
 
 and codegen_qual (qual : perktype_qualifier) : string =
   match qual with

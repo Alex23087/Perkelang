@@ -13,20 +13,20 @@ archetype UIElement {
 };
 
 model Button: UIElement {
-    let constructor: (float * float) -> void = (posx: float, posy: float): void => {
+    let constructor := (posx: float, posy: float): void => {
         self.posx = posx;
         self.posy = posy;
     },
 
-    let posx : float = 0.,
+    let posx := 0.,
     let posy : float = 0.,
-    let draw : () -> void = () : void => {
+    let draw := () : void => {
         printf("drawn button at (%f, %f)\n", self.posx, self.posy)
     }
 };
 
 fun main(): int {
-    let but : Button = summon Button(10., 0.);
+    let but := summon Button(10., 0.);
     but.draw();
     banish but
 };

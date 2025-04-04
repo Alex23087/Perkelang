@@ -52,6 +52,7 @@ type perktype_partial =
   | ArcheType of perkident * perkdecl list
   | Modeltype of perkident * perkident list * perkdecl list * perktype list
   | Vararg
+  | Infer
 [@@deriving show]
 
 and perktype =

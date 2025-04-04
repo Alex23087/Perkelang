@@ -102,7 +102,8 @@ perkfun:
   
 
 perkvardesc:
-  | i = Ident Colon t = perktype                                                                  { (t, i) }
+  | i = Ident Colon t = perktype                                                                           { (t, i) }
+  | i = Ident Colon                                                                                             { (([], Ast.Infer, []), i) }
   | error { raise (ParseError("variable descriptor expected (e.g. banana : int)")) }
   | Ident error { raise (ParseError("variable descriptor expected (e.g. banana : int)")) }
 
@@ -147,7 +148,9 @@ expr:
 
 perktype:
   | t = perktype_partial q = list(perktype_qualifier)                                                      { ([], t, q) }
+  | a = nonempty_list(perktype_attribute) t = perktype_partial q = list(perktype_qualifier)                { (a, t, q) }
   | t = perkfuntype q = list(perktype_qualifier)                                                           { ([], t, q) }
+  | a = nonempty_list(perktype_attribute) t = perkfuntype q = list(perktype_qualifier)                     { (a, t, q) }
   | LParen t = perktype RParen                                                                             { t }
   | Ellipsis                                                                                               { ([], Ast.Vararg, []) }
   | error                                                                                                  { raise (ParseError("type expected")) }

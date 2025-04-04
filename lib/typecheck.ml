@@ -66,13 +66,13 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
   | Def ((typ, id), expr) ->
       let typ' = resolve_type typ in
       let expr_res, expr_type = typecheck_expr expr in
-      let _ =
+      let typ'' =
         try match_types typ' expr_type
         with Type_match_error msg -> raise_type_error cmd msg
       in
       (* Check if the type is a user-defined type *)
-      bind_var id typ';
-      annot_copy cmd (Def ((typ', id), expr_res))
+      bind_var id typ'';
+      annot_copy cmd (Def ((typ'', id), expr_res))
   | Fundef (ret_type, id, params, body) ->
       push_symbol_table ();
       List.iter
@@ -166,7 +166,9 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
               (fun ((t, i), e) ->
                 if id = i then
                   let _ =
-                    try match_types typ t
+                    try
+                      match_types t typ
+                      (* TODO: Check very carefully: Should it be t typ or typ t? *)
                     with Type_match_error msg -> raise_type_error e msg
                   in
                   true
@@ -182,23 +184,37 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
                    ident id arch (show_perktype typ)))
         required_fields;
       (* Get constructor, if exists *)
+      push_symbol_table ();
+      bind_var "self"
+        ([], Modeltype (ident, archetypes, List.map fst fields, []), []);
       let constr =
         List.find_opt (fun ((_typ, id), _expr) -> id = "constructor") fields
       in
       let constr_params =
         match constr with
-        | Some (((_, Funtype (_params, _ret), _), _), _) ->
+        | Some (((_, Funtype (params, ret), _), _), _) ->
             (* Check that constructor returns void *)
             let _ =
-              try match_types ([], Basetype "void", []) _ret
+              try match_types ([], Basetype "void", []) ret
               with Type_match_error msg -> raise_type_error cmd msg
             in
-            _params
+            params
+        | Some (((_, Infer, _), _), expr) -> (
+            let _expr_res, (_, expr_type, _) = typecheck_expr expr in
+            match expr_type with
+            | Funtype (params, ret) ->
+                let _ =
+                  try match_types ([], Basetype "void", []) ret
+                  with Type_match_error msg -> raise_type_error cmd msg
+                in
+                params
+            | _ -> raise_type_error expr "constructor should be a function")
         | Some (_, def) ->
             raise_type_error def "constructor should be a function"
             (* This error should go on the type, not on the definition. But for now, types are not annotated *)
         | None -> []
       in
+      pop_symbol_table ();
       (* Check that all the fields defined in the model are well-typed *)
       push_symbol_table ();
       bind_var "self"
@@ -209,12 +225,12 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
         List.map
           (fun ((typ, id), expr) ->
             let expr_res, expr_type = typecheck_expr expr in
-            let _ =
+            let typ' =
               try match_types typ expr_type
               with Type_match_error msg -> raise_type_error expr msg
             in
-            bind_var id typ;
-            ((typ, id), expr_res))
+            bind_var id typ';
+            ((typ', id), expr_res))
           fields
       in
       pop_symbol_table ();
@@ -370,14 +386,15 @@ and match_types (expected : perktype) (actual : perktype) : perktype =
       let constr_types = List.map2 match_types constr_params1 constr_params2 in
       ([], Modeltype (name1, archetypes1, decls_types, constr_types), [])
   | Vararg, Vararg -> actual
+  | Infer, _ -> actual
   | _ ->
       raise
         (Type_match_error
-           (Printf.sprintf "Type mismatch: expected %s, \n\ngot %s instead"
-              (Codegen.codegen_type ~expand:true expected)
-              (Codegen.codegen_type ~expand:true actual)))
-(* (show_perktype expected)
-              (show_perktype actual))) *)
+           (Printf.sprintf "Type mismatch: expected %s, got %s instead"
+              (* (Codegen.codegen_type ~expand:true expected)
+              (Codegen.codegen_type ~expand:true actual))) *)
+              (show_perktype expected)
+              (show_perktype actual)))
 
 and match_type_list (expected : perktype list)
     (actual : (expr_a * perktype) list) : perktype list =
@@ -423,5 +440,6 @@ and resolve_type (typ : perktype) : perktype =
     | Modeltype (name, archetypes, decls, constr_params) ->
         let decls' = List.map (fun (t, id) -> (resolve_type t, id)) decls in
         Modeltype (name, archetypes, decls', constr_params)
-    | Vararg -> Vararg),
+    | Vararg -> Vararg
+    | Infer -> Infer),
     quals )
