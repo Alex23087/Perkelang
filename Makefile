@@ -24,3 +24,8 @@ run: build
 	./_build/default/bin/compiler.exe test/test.perk
 	gcc -o test/test.out test/test.c
 	./test/test.out
+
+.PHONY: build_extension
+build_extension:
+	cd perkelang-extension && \
+	vsce package --allow-missing-repository

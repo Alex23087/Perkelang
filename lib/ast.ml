@@ -25,6 +25,9 @@ let annotate_2_code (start_pos, end_pos) (node : 'a) : 'a annotated =
 let annotate_dummy (node : 'a) : 'a annotated =
   { loc = Location.dummy_pos; node }
 
+let annot_copy (annotated_node : 'a annotated) (node : 'a) : 'a annotated =
+  { loc = annotated_node.loc; node }
+
 type perkident = string [@@deriving show]
 
 type perktype_attribute =
@@ -48,6 +51,8 @@ type perktype_partial =
   | Arraytype of perktype * int option
   | Classtype of string
   | Structtype of string
+  | ArcheType of perkident * perkdecl list
+  | Modeltype of perkident * perkident list * perkdecl list * perktype list
 [@@deriving show]
 
 and perktype =
@@ -55,9 +60,8 @@ and perktype =
 [@@deriving show]
 
 (* and perktype_annotated = perktype annotated [@@deriving show] *)
-
-type perkvardesc = perktype * perkident [@@deriving show]
-type perkdecl = perkvardesc [@@deriving show]
+and perkvardesc = perktype * perkident [@@deriving show]
+and perkdecl = perkvardesc [@@deriving show]
 
 type binop =
   | Add
@@ -69,7 +73,6 @@ type binop =
   | Leq
   | Gt
   | Geq
-  | Dot
 (*  ... boolean and bitwise ops and all that  *)
 [@@deriving show]
 
@@ -108,6 +111,7 @@ and expr_t =
   | Parenthesised of expr_a
   | Subscript of expr_a * expr_a
   | Summon of perkident * expr_a list
+  | Access of expr_a * perkident
 [@@deriving show]
 
 (* Syntax of the language *)

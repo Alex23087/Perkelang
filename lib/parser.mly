@@ -126,6 +126,7 @@ expr:
   | e1 = expr LBracket e2 = expr RBracket                                                                  { annotate_2_code $loc (Ast.Subscript (e1, e2)) }
   | Summon i = Ident LParen l = expr_list RParen                                                           { annotate_2_code $loc (Summon (i, l)) }
   | Summon i = Ident LParen RParen                                                                         { annotate_2_code $loc (Summon (i, [])) }
+  | e1 = expr Dot i = Ident                                                                                { annotate_2_code $loc (Ast.Access (e1, i)) }
 
   | error                                                                                                  { raise (ParseError("expression expected")) }
   | expr error                                                                                             { raise (ParseError("unexpected expression")) }
@@ -166,7 +167,6 @@ perktype_partial:
   | Leq                                                                                                    { Ast.Leq }
   | Gt                                                                                                     { Ast.Gt }
   | Geq                                                                                                    { Ast.Geq }
-  | Dot                                                                                                    { Ast.Dot }
 
 %inline preunop:
   | Minus                                                                                                  { Ast.Neg }

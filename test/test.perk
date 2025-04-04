@@ -4,73 +4,30 @@ import "malloc.h";
 import "stdint.h";
 
 
-archetype Superbanana {
-    super_palle : int,
-    add: int -> int
+archetype UIElement {
+    posx : float,
+    posy : float,
+
+    // currently unable to write type () -> void
+    draw : int -> void
 };
 
-archetype Superpera {
-    super_palle : int
-};
 
-model Prera {
-    let sub: int -> int = (x: int): int => {x - 5}
-};
-
-model Bnanana: Superbanana {
-    let super_palle: int = 0o100,
-    let altracosa : int = 0,
-    let terza_cosa: float = .9,
-
-    let add: int -> int = (x: int): int => {x + 5},
-    let constructor: (int * int) -> void = (super_palle: int, altracosa: int): void => {
-        self.super_palle = super_palle;
-        self.altracosa = altracosa;
+model Button: UIElement {
+    let constructor: (float * float) -> void = (posx: float, posy: float): void => {
+        self.posx = posx;
+        self.posy = posy;
     },
 
-    let p: Prera = summon Prera()
-};
-
-let counter: int = 0;
-let increase: uint8_t -> void = (i: uint8_t): void => {
-    counter = (4 + 3) * 2;
-};
-
-let map : (((int -> int) * int * int*) -> int*) = (f : int -> int, n : int, A : int*): int* => {
-    let res : int* = malloc(n * 4);
-    
-    let i : int = 0;
-    
-    for(i = 0; i < n; i ++) {
-        res[i] = f(A[i]);
-    };
-    
-    return res
+    let posx : float = 0.,
+    let posy : float = 0.,
+    let draw : int -> void = (x : int) : void => {
+        printf("drawn button at (%f, %f)\n", self.posx, self.posy)
+    }
 };
 
 fun main(): int {
-    //let new banana: Bnanana(10, 0);
-
-    let banana: Bnanana = summon Bnanana(10, 0);
-
-    let square : int -> int = (a : int): int => {
-        return a * a
-    };
-
-    let A: int* = malloc(10 * sizeof(int));
-    
-    for (let i: int = 0; i < 10; i++){
-        A[i] = i;
-    };
-    
-    let B : int* = map(square, 10, A);
-    
-    for (let i: int = 0; i < 10; i = i+1) {
-        printf("%d\t%d\n", A[i], B[i]);
-    };
-
-    printf("%d\n", banana.super_palle);
-    banana.add(10);
-
-    banish banana;
-}
+    let but : Button = summon Button(10, 0);
+    but.draw(0);
+    banish but
+};

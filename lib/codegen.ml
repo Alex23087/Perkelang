@@ -28,6 +28,8 @@ let rec type_descriptor_of_perktype (t : perktype) : string =
   | Pointertype t -> Printf.sprintf "%s_ptr" (type_descriptor_of_perktype t)
   | Arraytype (t, _) -> Printf.sprintf "%s_arr" (type_descriptor_of_perktype t)
   | Classtype s -> s
+  | ArcheType (_, _) | Modeltype _ ->
+      failwith "Should not happen, for now" (* TODO: Figure out *)
 
 let function_type_hashmap : (perktype, string * string * string) Hashtbl.t =
   Hashtbl.create 10
@@ -255,10 +257,12 @@ and codegen_command (cmd : command_a) (indentation : int) : string =
         Printf.sprintf
           "%s%s %s_init(%s) {\n\
           \    %s%s obj = malloc(sizeof(struct %s));\n\
+          \    %svoid* self = obj;\n\
            %s\n\
            %s    %sreturn obj;\n\
            }\n"
           indent_string name name params_str_with_types indent_string name name
+          indent_string
           (if List.length mems = 0 then ""
            else
              indent_string ^ "    "
@@ -390,6 +394,8 @@ and codegen_type ?(expand : bool = false) (t : perktype) : string =
         Printf.sprintf "%s[%d]" (codegen_type t ~expand) n
     | Arraytype (t, None) -> Printf.sprintf "%s[]" (codegen_type t ~expand)
     | Classtype s -> s
+    | ArcheType (_, _) | Modeltype _ ->
+        failwith "Should not happen, for now" (* TODO: Figure out *)
   in
   if attrs_str = "" && quals_str = "" then type_str
   else if attrs_str = "" then Printf.sprintf "%s %s" quals_str type_str
@@ -424,13 +430,11 @@ and codegen_expr (e : expr_a) : string =
       let expr_str = codegen_expr e in
       let args_str = String.concat ", " (List.map codegen_expr args) in
       match ( $ ) e with
-      | Binop (Dot, e1, _) ->
+      | Access (e1, _) ->
           let e1_str = codegen_expr e1 in
           Printf.sprintf "%s(%s, %s)" expr_str e1_str args_str
       | _ -> Printf.sprintf "%s(%s)" expr_str args_str)
-  | Binop (Dot, e1, e2) ->
-      Printf.sprintf "%s%s%s" (codegen_expr e1) (codegen_binop Dot)
-        (codegen_expr e2)
+  | Access (e1, ide) -> Printf.sprintf "%s->%s" (codegen_expr e1) ide
   | Binop (op, e1, e2) ->
       Printf.sprintf "%s %s %s" (codegen_expr e1) (codegen_binop op)
         (codegen_expr e2)
@@ -458,7 +462,6 @@ and codegen_binop (op : binop) : string =
   | Leq -> "<="
   | Gt -> ">"
   | Geq -> ">="
-  | Dot -> "->"
 
 and codegen_preunop (op : preunop) : string =
   match op with

@@ -1,3 +1,4 @@
 _build
 test/*.out
+test/*.ast
 test/test.c
