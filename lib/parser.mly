@@ -6,7 +6,7 @@
 
 /* Tokens declarations */
 %token EOF
-%token Plus Eq Lt Leq Gt Geq Minus Star Div Ampersand PlusPlus MinusMinus Dot
+%token Plus Eq Lt Leq Gt Geq Minus Star Div Ampersand PlusPlus MinusMinus Dot Ellipsis
 %token Fun Assign If Else While Do For
 %token <int> Integer
 %token <float> Float
@@ -61,6 +61,7 @@ command:
   | ic = InlineC                                                                                           { annotate_2_code $loc (Ast.InlineC(ic)) }
   | d = perkdef                                                                                            { annotate_2_code $loc (Ast.Def d) }
   | Fun pf = perkfun                                                                                       { pf }
+  | Extern id = Ident Colon t = perktype                                                                   { annotate_2_code $loc (Ast.Extern (id, t)) }
   | l = expr Assign r = expr                                                                               { annotate_2_code $loc (Ast.Assign (l, r)) }
   | If LParen e = expr RParen LBrace c1 = command RBrace Else LBrace c2 = command RBrace                   { annotate_2_code $loc (Ast.IfThenElse (e, c1, c2)) }
   | If LParen e = expr RParen LBrace c1 = command RBrace                                                   { annotate_2_code $loc (Ast.IfThenElse (e, c1, annotate_dummy Ast.Skip)) }
@@ -104,10 +105,6 @@ perkvardesc:
   | i = Ident Colon t = perktype                                                                  { (t, i) }
   | error { raise (ParseError("variable descriptor expected (e.g. banana : int)")) }
   | Ident error { raise (ParseError("variable descriptor expected (e.g. banana : int)")) }
-  
-%inline perkfuntype:
-  | t1 = perktype Arrow t2 = perktype                                                    { Ast.Funtype ([t1], t2) }
-  | LParen tl = perktype_list RParen Arrow tf = perktype                                          { Ast.Funtype (tl, tf) }
 
 expr:
   | Star e = expr                                                                                          { annotate_2_code $loc (Ast.Pointer e) }
@@ -137,24 +134,29 @@ expr:
   | Public                                                                                                 { Ast.Public }
   | Private                                                                                                { Ast.Private }
   | Static                                                                                                 { Ast.Static }
-  | Extern                                                                                                 { Ast.Extern }
 
 %inline perktype_qualifier:
   | Const                                                                                                  { Ast.Const }
   | Volatile                                                                                               { Ast.Volatile }
   | Restrict                                                                                               { Ast.Restrict }
 
+%inline perkfuntype:
+  | t1 = perktype Arrow t2 = perktype                                                                      { Ast.Funtype ([t1], t2) }
+  | LParen RParen Arrow t = perktype                                                                       { Ast.Funtype ([], t) }
+  | LParen tl = perktype_list RParen Arrow tf = perktype                                                   { Ast.Funtype (tl, tf) }
+
 perktype:
-  | t = perktype_partial q = list(perktype_qualifier)                                                              { ([], t, q) }
+  | t = perktype_partial q = list(perktype_qualifier)                                                      { ([], t, q) }
   | t = perkfuntype q = list(perktype_qualifier)                                                           { ([], t, q) }
-  | LParen t = perktype RParen                                                                    { t }
+  | LParen t = perktype RParen                                                                             { t }
+  | Ellipsis                                                                                               { ([], Ast.Vararg, []) }
   | error                                                                                                  { raise (ParseError("type expected")) }
 
 perktype_partial:
   | i = Ident                                                                                              { Ast.Basetype i }
-  | LBracket t = perktype RBracket                                                                { Ast.Arraytype (t, None) }
-  | LBracket t = perktype n = Integer RBracket                                                    { Ast.Arraytype (t, Some n) }
-  | t = perktype Star                                                                             { Ast.Pointertype t }
+  | LBracket t = perktype RBracket                                                                         { Ast.Arraytype (t, None) }
+  | LBracket t = perktype n = Integer RBracket                                                             { Ast.Arraytype (t, Some n) }
+  | t = perktype Star                                                                                      { Ast.Pointertype t }
   | error                                                                                                  { raise (ParseError("type expected")) }
 
 %inline binop:

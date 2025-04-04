@@ -3,15 +3,14 @@ import "stdlib.h";
 import "malloc.h";
 import "stdint.h";
 
+extern printf : (char* * ...) -> int;
 
 archetype UIElement {
     posx : float,
     posy : float,
 
-    // currently unable to write type () -> void
-    draw : int -> void
+    draw : () -> void
 };
-
 
 model Button: UIElement {
     let constructor: (float * float) -> void = (posx: float, posy: float): void => {
@@ -21,13 +20,13 @@ model Button: UIElement {
 
     let posx : float = 0.,
     let posy : float = 0.,
-    let draw : int -> void = (x : int) : void => {
+    let draw : () -> void = () : void => {
         printf("drawn button at (%f, %f)\n", self.posx, self.posy)
     }
 };
 
 fun main(): int {
-    let but : Button = summon Button(10, 0);
-    but.draw(0);
+    let but : Button = summon Button(10., 0.);
+    but.draw();
     banish but
 };

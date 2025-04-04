@@ -2,14 +2,30 @@
   "scopeName": "source.perkelang",
   "name": "Perkelang",
   "patterns": [
-    { "include": "#comments" },
-    { "include": "#strings" },
-    { "include": "#numbers" },
-    { "include": "#keywords" },
-    { "include": "#types" },
-    { "include": "#functions" },
-    { "include": "#embedded-c" },
-    { "include": "#lambdas" }
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#types"
+    },
+    {
+      "include": "#functions"
+    },
+    {
+      "include": "#embedded-c"
+    },
+    {
+      "include": "#lambdas"
+    }
   ],
   "repository": {
     "comments": {
@@ -79,7 +95,7 @@
       "patterns": [
         {
           "name": "keyword.control.perkelang",
-          "match": "\\b(let|import|archetype|model|fun|for|while|do|if|else|return|summon)\\b"
+          "match": "\\b(let|import|extern|archetype|model|fun|for|while|do|if|else|return|summon)\\b"
         },
         {
           "name": "keyword.other.begin-c.perkelang",

@@ -34,7 +34,6 @@ type perktype_attribute =
   | Public
   | Private
   | Static
-  | Extern
 [@@deriving show]
 
 type perktype_qualifier =
@@ -49,10 +48,10 @@ type perktype_partial =
   | Funtype of perktype list * perktype
   | Pointertype of perktype
   | Arraytype of perktype * int option
-  | Classtype of string
   | Structtype of string
   | ArcheType of perkident * perkdecl list
   | Modeltype of perkident * perkident list * perkdecl list * perktype list
+  | Vararg
 [@@deriving show]
 
 and perktype =
@@ -126,6 +125,7 @@ and command_t =
       * perkvardesc list
       * command_a (* return, name, args, body *)
   (* | Classdecl of perklass *)
+  | Extern of perkident * perktype
   | Assign of (expr_a * expr_a)
   | Seq of command_a * command_a
   | IfThenElse of expr_a * command_a * command_a

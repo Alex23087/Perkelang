@@ -25,7 +25,7 @@ run: build
 	gcc -o test/test.out test/test.c
 	./test/test.out
 
-.PHONY: build_extension
-build_extension:
+.PHONY: extension
+extension:
 	cd perkelang-extension && \
 	vsce package --allow-missing-repository

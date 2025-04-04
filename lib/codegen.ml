@@ -27,9 +27,11 @@ let rec type_descriptor_of_perktype (t : perktype) : string =
       Printf.sprintf "l_%s_to_%s_r" args_str (type_descriptor_of_perktype ret)
   | Pointertype t -> Printf.sprintf "%s_ptr" (type_descriptor_of_perktype t)
   | Arraytype (t, _) -> Printf.sprintf "%s_arr" (type_descriptor_of_perktype t)
-  | Classtype s -> s
-  | ArcheType (_, _) | Modeltype _ ->
-      failwith "Should not happen, for now" (* TODO: Figure out *)
+  | Vararg ->
+      "vararg"
+      (* This is probably problematic, cannot define function pointers with ... . Nvm, apparently you can 😕*)
+  | ArcheType (name, _decls) -> name
+  | Modeltype (name, _archs, _decls, _constr_params) -> name
 
 let function_type_hashmap : (perktype, string * string * string) Hashtbl.t =
   Hashtbl.create 10
@@ -252,8 +254,9 @@ and codegen_command (cmd : command_a) (indentation : int) : string =
                       (List.mapi (fun i _ -> Printf.sprintf "arg_%d" i) params)
                   )
               | _ -> raise (TypeError "Constructor is not a function type"))
-          (* TODO: Add error locations *)
         in
+        let params_str = if params_str = "" then "" else ", " ^ params_str in
+        (* TODO: Add error locations *)
         Printf.sprintf
           "%s%s %s_init(%s) {\n\
           \    %s%s obj = malloc(sizeof(struct %s));\n\
@@ -277,7 +280,7 @@ and codegen_command (cmd : command_a) (indentation : int) : string =
           (match constructor with
           | None -> ""
           | Some _ ->
-              Printf.sprintf "%s    obj->constructor(obj, %s);\n" indent_string
+              Printf.sprintf "%s    obj->constructor(obj%s);\n" indent_string
                 params_str)
           indent_string
   | InlineC s -> s
@@ -287,6 +290,9 @@ and codegen_command (cmd : command_a) (indentation : int) : string =
       ^ "\n" ^ indent_string ^ "}"
   | Def (t, e) -> indent_string ^ codegen_def t e
   | Fundef (t, id, args, body) -> indent_string ^ codegen_fundef t id args body
+  | Extern _ ->
+      ""
+      (* Externs are only useful for type checking. No need to keep it for codegen step *)
   | Assign (l, r) ->
       indent_string
       ^ Printf.sprintf "%s = %s;" (codegen_expr l) (codegen_expr r)
@@ -393,9 +399,9 @@ and codegen_type ?(expand : bool = false) (t : perktype) : string =
     | Arraytype (t, Some n) ->
         Printf.sprintf "%s[%d]" (codegen_type t ~expand) n
     | Arraytype (t, None) -> Printf.sprintf "%s[]" (codegen_type t ~expand)
-    | Classtype s -> s
-    | ArcheType (_, _) | Modeltype _ ->
-        failwith "Should not happen, for now" (* TODO: Figure out *)
+    | Vararg -> "..."
+    | Modeltype (name, _archs, _decls, _constr_params) -> name
+    | ArcheType (name, _decls) -> name
   in
   if attrs_str = "" && quals_str = "" then type_str
   else if attrs_str = "" then Printf.sprintf "%s %s" quals_str type_str
@@ -407,7 +413,6 @@ and codegen_attr (attr : perktype_attribute) : string =
   | Public -> "public"
   | Private -> "private"
   | Static -> "static"
-  | Extern -> "extern"
 
 and codegen_qual (qual : perktype_qualifier) : string =
   match qual with
@@ -432,7 +437,8 @@ and codegen_expr (e : expr_a) : string =
       match ( $ ) e with
       | Access (e1, _) ->
           let e1_str = codegen_expr e1 in
-          Printf.sprintf "%s(%s, %s)" expr_str e1_str args_str
+          let args_str = if List.length args = 0 then "" else ", " ^ args_str in
+          Printf.sprintf "%s(%s%s)" expr_str e1_str args_str
       | _ -> Printf.sprintf "%s(%s)" expr_str args_str)
   | Access (e1, ide) -> Printf.sprintf "%s->%s" (codegen_expr e1) ide
   | Binop (op, e1, e2) ->
