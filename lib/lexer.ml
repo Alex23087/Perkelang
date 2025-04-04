@@ -66,6 +66,9 @@ let rec token lexbuf =
   | "&" -> Ampersand
   | "." -> Dot
   | "..." -> Ellipsis
+  | "?" -> Question
+  | "nothing" | "none" -> Nothing
+  | "something" | "some" | "just" -> Something
   (* | "☠" | "forget" | "forgor" -> Forgor *)
   | "if" -> If
   | "else" -> Else

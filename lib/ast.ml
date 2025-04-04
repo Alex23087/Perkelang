@@ -51,6 +51,8 @@ type perktype_partial =
   | Structtype of string
   | ArcheType of perkident * perkdecl list
   | Modeltype of perkident * perkident list * perkdecl list * perktype list
+  | Optiontype of perktype
+  | Tupletype of perktype list
   | Vararg
   | Infer
 [@@deriving show]
@@ -95,6 +97,8 @@ type perkdef = perkdecl * expr_a [@@deriving show]
 (* name, attributes, methods *)
 (* and perklass = Class of perkident * (perkdef list) * (perkfun list) [@@deriving show] *)
 and expr_t =
+  (* | Nothing of perktype
+  | Something of expr_a * perktype *)
   | Int of int
   | Float of float
   | Char of char
@@ -110,8 +114,10 @@ and expr_t =
   | PostUnop of postunop * expr_a
   | Parenthesised of expr_a
   | Subscript of expr_a * expr_a
+  | TupleSubscript of expr_a * int
   | Summon of perkident * expr_a list
   | Access of expr_a * perkident
+  | Tuple of expr_a list * perktype option
 [@@deriving show]
 
 (* Syntax of the language *)

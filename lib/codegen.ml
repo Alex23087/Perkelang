@@ -33,7 +33,11 @@ let rec type_descriptor_of_perktype (t : perktype) : string =
       (* This is probably problematic, cannot define function pointers with ... . Nvm, apparently you can 😕*)
   | ArcheType (name, _decls) -> name
   | Modeltype (name, _archs, _decls, _constr_params) -> name
+  | Optiontype t -> Printf.sprintf "%s_opt" (type_descriptor_of_perktype t)
   | Infer -> failwith "Impossible: type has not been inferred"
+  | Tupletype ts ->
+      Printf.sprintf "begintup_%s_endtup"
+        (String.concat "__" (List.map type_descriptor_of_perktype ts))
 
 let function_type_hashmap : (perktype, string * string * string) Hashtbl.t =
   Hashtbl.create 10
@@ -41,6 +45,7 @@ let function_type_hashmap : (perktype, string * string * string) Hashtbl.t =
 let lambdas_hashmap : (expr_a, string * string) Hashtbl.t = Hashtbl.create 10
 let symbol_table : (perkident, perktype) Hashtbl.t = Hashtbl.create 10
 let import_list : string list ref = ref []
+let tuple_hashmap : (perktype, string) Hashtbl.t = Hashtbl.create 10
 
 let archetype_hashtable : (string, (string, perktype) Hashtbl.t) Hashtbl.t =
   Hashtbl.create 10
@@ -68,7 +73,31 @@ let add_binding_to_archetype (name : string) (id : perkident) (typ : perktype) :
 let add_import (lib : string) : unit =
   if not (List.mem lib !import_list) then import_list := lib :: !import_list
 
-let rec get_function_type (t : perktype) : string * string * string =
+let rec get_tuple (t : perktype) : string =
+  try Hashtbl.find tuple_hashmap t
+  with Not_found -> (
+    match t with
+    | _, Tupletype ts, _ ->
+        let type_str = type_descriptor_of_perktype t in
+        let compiled =
+          Printf.sprintf "typedef struct {%s} %s;"
+            (if List.length ts = 0 then ""
+             else
+               String.concat "; "
+                 (List.mapi
+                    (fun i t -> Printf.sprintf "%s _%d" (codegen_type t) i)
+                    ts)
+               ^ ";")
+            type_str
+        in
+        Hashtbl.add tuple_hashmap t compiled;
+        type_str
+    | _ ->
+        failwith
+          (Printf.sprintf "get_tuple: not a tuple type, got %s"
+             (type_descriptor_of_perktype t)))
+
+and get_function_type (t : perktype) : string * string * string =
   try Hashtbl.find function_type_hashmap t
   with Not_found -> (
     let _, t', _ = t in
@@ -137,6 +166,10 @@ and codegen_program (cmd : command_a) : string =
       (fun _ v acc -> Printf.sprintf "%s%s;\n" acc (snd_3 v))
       function_type_hashmap ""
   ^ "\n"
+  (* Write typedefs for tuples *)
+  ^ Hashtbl.fold
+      (fun _ v acc -> Printf.sprintf "%s%s;\n" acc v)
+      tuple_hashmap ""
   (* Write struct definitions *)
   ^ String.concat "\n" (List.rev !struct_def_list)
   ^ "\n\n"
@@ -275,12 +308,12 @@ and codegen_command (cmd : command_a) (indentation : int) : string =
         Printf.sprintf
           "%s%s %s_init(%s) {\n\
           \    %s%s obj = malloc(sizeof(struct %s));\n\
-          \    %svoid* self = obj;\n\
+          \    %s%s self = obj;\n\
            %s\n\
            %s    %sreturn obj;\n\
            }\n"
           indent_string name name params_str_with_types indent_string name name
-          indent_string
+          indent_string name
           (if List.length mems = 0 then ""
            else
              indent_string ^ "    "
@@ -418,6 +451,11 @@ and codegen_type ?(expand : bool = false) (t : perktype) : string =
     | Modeltype (name, _archs, _decls, _constr_params) -> name
     | ArcheType (name, _decls) -> name
     | Infer -> failwith "Impossible: type has not been inferred"
+    | Optiontype t ->
+        Printf.sprintf "struct {int is_some; %s contents}" (codegen_type t)
+    | Tupletype _ts ->
+        let _ = get_tuple t in
+        type_descriptor_of_perktype t
   in
   if attrs_str = "" && quals_str = "" then type_str
   else if attrs_str = "" then Printf.sprintf "%s %s" quals_str type_str
@@ -469,6 +507,15 @@ and codegen_expr (e : expr_a) : string =
       let args_str = String.concat ", " (List.map codegen_expr args) in
       (* Printf.sprintf "%sstruct %s %s;\n%s%s_init(&%s);\n%s%s.constructor((void*)&%s, %s);" indent_string typident name indent_string typident name indent_string name name args_str *)
       Printf.sprintf "%s_init(%s)" typident args_str
+  | Tuple (es, typ) ->
+      Printf.sprintf "(%s){%s}"
+        (typ |> Option.get |> codegen_type)
+        (String.concat ", "
+           (List.map (fun e -> Printf.sprintf "%s" (codegen_expr e)) es))
+  | TupleSubscript (e, i) -> Printf.sprintf "%s._%d" (codegen_expr e) i
+(* | Nothing t -> Printf.sprintf "{0, 0}" TODO: Continue here *)
+
+(* struct {int is_empty; int value;} palle = {0,1}; *)
 
 and codegen_binop (op : binop) : string =
   match op with

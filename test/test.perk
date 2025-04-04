@@ -3,11 +3,13 @@ import "stdlib.h";
 import "malloc.h";
 import "stdint.h";
 
-extern printf : (char* * ...) -> int;
+extern printf : (char*, ...) -> int;
 
 archetype UIElement {
     posx : float,
     posy : float,
+
+    //opt: float?,
 
     draw : () -> void
 };
@@ -16,12 +18,27 @@ model Button: UIElement {
     let constructor := (posx: float, posy: float): void => {
         self.posx = posx;
         self.posy = posy;
+    },  
+    
+    let posx : float = 0.,
+    let posy : float = 0.,
+
+    let pos: (float * float) = (self.posx, self.posy),
+
+    let where_am_i := () : (float * float) => {
+        return (self.posx, self.posy);
     },
 
-    let posx := 0.,
-    let posy : float = 0.,
     let draw := () : void => {
-        printf("drawn button at (%f, %f)\n", self.posx, self.posy)
+        printf("drawn button at (%f, %f)\n", self.posx, self.pos[1]);
+
+        let x := 10;
+
+        let f := () : int => {
+            return x + 1;
+        };
+
+        f();
     }
 };
 

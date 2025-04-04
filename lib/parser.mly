@@ -6,7 +6,7 @@
 
 /* Tokens declarations */
 %token EOF
-%token Plus Eq Lt Leq Gt Geq Minus Star Div Ampersand PlusPlus MinusMinus Dot Ellipsis
+%token Plus Eq Lt Leq Gt Geq Minus Star Div Ampersand PlusPlus MinusMinus Dot Ellipsis Question
 %token Fun Assign If Else While Do For
 %token <int> Integer
 %token <float> Float
@@ -21,14 +21,25 @@
 %token <string> InlineC
 %token Import Open
 %token Archetype Model Summon Banish
+%token Nothing Something
 
 /* Precedence and associativity specification */
-%left Plus Minus Star Div
-%left Lt Leq Gt Geq
-%left Eq
-%left Arrow
-%left LParen
+%left Semicolon
+%left Comma
+%nonassoc Lt Leq Gt Geq
+%nonassoc Eq
+%left Arrow             /* For Bigarrow in lambda expressions */
+%left Plus Minus
+%left Star Div
+%right PlusPlus MinusMinus Bang Ampersand
+                          /* The above line is intended for prefix operators.
+                             (You would use %prec with these tokens in your grammar
+                             so that, for example, a pointer dereference (prefix Star)
+                             binds tighter than binary Star/Div.) */
+%nonassoc POSTFIX         /* Intended for postfix operators (e.g. post ++/--)
+                             via %prec POSTFIX in the corresponding rules */
 %left Dot
+
 
 /* Starting symbol */
 %start program
@@ -112,7 +123,7 @@ expr:
   | e1 = expr LParen args = separated_list(Comma, expr) RParen                                             { annotate_2_code $loc (Ast.Apply (e1, args)) }
   | e1 = expr b = binop e2 = expr                                                                          { annotate_2_code $loc (Ast.Binop (b, e1, e2)) }
   | u = preunop e = expr                                                                                   { annotate_2_code $loc (Ast.PreUnop (u, e)) }
-  | e = expr u = postunop                                                                                  { annotate_2_code $loc (Ast.PostUnop (u, e)) }
+  | e = expr u = postunop %prec POSTFIX                                                                    { annotate_2_code $loc (Ast.PostUnop (u, e)) }
   | LParen id_list = perkvardesc_list RParen Colon ret = perktype Bigarrow LBrace c = command RBrace       { annotate_2_code $loc (Ast.Lambda (ret, id_list, c)) }
   | LParen RParen Colon ret = perktype Bigarrow LBrace c = command RBrace                                  { annotate_2_code $loc (Ast.Lambda (ret, [], c)) }
   | n = Integer                                                                                            { annotate_2_code $loc (Ast.Int (n)) }
@@ -125,6 +136,10 @@ expr:
   | Summon i = Ident LParen l = expr_list RParen                                                           { annotate_2_code $loc (Summon (i, l)) }
   | Summon i = Ident LParen RParen                                                                         { annotate_2_code $loc (Summon (i, [])) }
   | e1 = expr Dot i = Ident                                                                                { annotate_2_code $loc (Ast.Access (e1, i)) }
+  // | Nothing                                                                                                { annotate_2_code $loc (Ast.Nothing Ast.Infer) }
+  // | Something e = expr                                                                                     { annotate_2_code $loc (Ast.Something (e, Ast.Infer)) }
+  | LParen RParen                                                                                          { annotate_2_code $loc (Ast.Tuple ([], None)) }
+  | LParen e = expr_list RParen                                                                            { annotate_2_code $loc (Ast.Tuple (e, None)) }
 
   | error                                                                                                  { raise (ParseError("expression expected")) }
   | expr error                                                                                             { raise (ParseError("unexpected expression")) }
@@ -159,7 +174,10 @@ perktype_partial:
   | i = Ident                                                                                              { Ast.Basetype i }
   | LBracket t = perktype RBracket                                                                         { Ast.Arraytype (t, None) }
   | LBracket t = perktype n = Integer RBracket                                                             { Ast.Arraytype (t, Some n) }
+  | LParen tl = separated_nonempty_list (Star, perktype) RParen                                            { Ast.Tupletype(tl)}
+  | LParen RParen                                                                                          { Ast.Tupletype [] }
   | t = perktype Star                                                                                      { Ast.Pointertype t }
+  | t = perktype Question                                                                                  { Ast.Optiontype t }
   | error                                                                                                  { raise (ParseError("type expected")) }
 
 %inline binop:
@@ -201,7 +219,7 @@ ident_list:
 
 perktype_list:
   | t = perktype { [t] }
-  | tl = perktype Star t = perktype_list { tl :: t }
+  | tl = perktype Comma t = perktype_list { tl :: t }
   | error { raise (ParseError("type expected")) }
   | perktype error { raise (ParseError("unexpected type")) }
 
