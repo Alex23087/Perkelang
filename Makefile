@@ -1,3 +1,5 @@
+PREFIX ?= /usr/local/perkelang
+
 # .PHONY: compile
 # compile:
 # 	mkdir -p build
@@ -21,11 +23,26 @@ deps:
 	opam install menhir
 
 run: build
-	./_build/default/bin/compiler.exe test/test.perk
+	./_build/default/bin/perkc.exe test/test.perk
 	gcc -o test/test.out test/test.c
 	./test/test.out
 
-.PHONY: extension
-extension:
+.PHONY: extensions
+extensions:
 	cd perkelang-extension && \
 	vsce package --allow-missing-repository
+	cd perkelang-vscode-lsp && \
+	npx tsc && \
+	vsce package --allow-missing-repository
+
+.PHONY: install
+install: build uninstall
+	cd _build/default/ && \
+	sudo mkdir -p $(PREFIX)/ && \
+	sudo cp -r . $(PREFIX)/ && \
+	sudo ln -s $(PREFIX)/bin/perkc.exe /usr/local/bin/perkc
+
+.PHONY: uninstall
+uninstall:
+	sudo rm -rf $(PREFIX)
+	sudo rm -f /usr/local/bin/perkc

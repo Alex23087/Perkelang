@@ -247,11 +247,10 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
           archetype_decls
       in
       if not has_all_the_right_things then
-        let line, col = (( @@ ) tldf).start_pos in
         raise
           (Type_error
-             ( line,
-               col,
+             ( (( @@ ) tldf).start_pos,
+               (( @@ ) tldf).end_pos,
                Printf.sprintf
                  "Model %s does not properly implement Archetype %s: missing \
                   declaration for %s"

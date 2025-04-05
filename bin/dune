@@ -1,5 +1,6 @@
 (executable
- (name compiler)
+ (name perkc)
  (public_name Perkelang)
  (libraries Perkelang menhirLib)
- (flags (:standard -g)))
+ (flags
+  (:standard -g)))

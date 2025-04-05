@@ -3,8 +3,7 @@ open Errors
 open Symbol_table
 
 let raise_type_error (node : 'a annotated) (msg : string) =
-  let line, col = (( @@ ) node).start_pos in
-  raise (Type_error (line, col, msg))
+  raise (Type_error ((( @@ ) node).start_pos, (( @@ ) node).end_pos, msg))
 
 let var_symbol_table : (perkident, perktype) Hashtbl.t list ref = ref []
 
@@ -286,9 +285,7 @@ and typecheck_expr (expr : expr_a) : expr_a * perktype =
       let fun_param_types, fun_ret_type =
         match fun_type with
         | _, Funtype (param_types, ret_type), _ -> (param_types, ret_type)
-        | _ ->
-            let line, col = (( @@ ) func).start_pos in
-            raise (Type_error (line, col, "Function type expected"))
+        | _ -> raise_type_error func "Function type expected"
       in
       let param_rets = List.map typecheck_expr params in
       let param_types = match_type_list fun_param_types param_rets in

@@ -1,0 +1,40 @@
+{
+  "name": "perkelang-vscode-lsp",
+  "displayName": "Perkelang Language Server",
+  "version": "1.0.0",
+  "description": "A VSCode extension for the Perkelang language.",
+  "publisher": "Perkelo",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "keywords": [
+    "Perkelang",
+    "language",
+    "extension"
+  ],
+  "author": "Perkelo",
+  "type": "commonjs",
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "typescript": "^5.2.0",
+    "vscode": "^1.1.37"
+  },
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "perkelang",
+        "aliases": [
+          "Perkelang"
+        ],
+        "extensions": [
+          ".perk"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ]
+  }
+}

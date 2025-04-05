@@ -2,3 +2,6 @@ _build
 test/*.out
 test/*.ast
 test/test.c
+
+perkelang-vscode-lsp/node_modules
+perkelang-vscode-lsp/out
