@@ -37,7 +37,7 @@ try
   let ast = ast_of_channel inchn in
   let ast = typecheck_program ast in
   let oaf = open_out out_ast_file in
-  output_string oaf (show_command_a ast);
+  output_string oaf (String.concat "\n" (List.map show_topleveldef_a ast));
   let oc = open_out out_file in
   output_string oc (ast |> codegen_program);
   close_out oc

@@ -43,11 +43,12 @@
 
 /* Starting symbol */
 %start program
-%type <Ast.command_a> program
+%type <Ast.topleveldef_a list> program
+%type <Ast.topleveldef_a> topleveldef
 %type <Ast.command_a> command
 %type <Ast.perkdef> perkdef
 %type <Ast.perkvardesc> perkvardesc
-%type <Ast.command_a> perkfun
+%type <Ast.topleveldef_a> perkfun
 %type <Ast.perktype> perktype
 %type <Ast.perktype_partial> perkfuntype
 %type <Ast.binop> binop
@@ -64,15 +65,22 @@
 /* Grammar specification */
 
 program:
-  | c = command EOF { c }
+  | defs = separated_list(Semicolon, topleveldef) option(Semicolon) EOF { defs }
 
-command:
+topleveldef:
   | Import i = String                                                                                      { annotate_2_code $loc (Ast.Import ("<" ^ i ^ ">")) }
   | Open i = String                                                                                        { annotate_2_code $loc (Ast.Import ("\"" ^ i ^ "\"")) }
+  | Extern id = Ident Colon t = perktype                                                                   { annotate_2_code $loc (Ast.Extern (id, t)) }
   | ic = InlineC                                                                                           { annotate_2_code $loc (Ast.InlineC(ic)) }
   | d = perkdef                                                                                            { annotate_2_code $loc (Ast.Def d) }
+  | Archetype i = Ident LBrace l = perkvardesc_list RBrace                                                 { annotate_2_code $loc (Ast.Archetype (i, l)) }
+  | Model i = Ident Colon il = ident_list LBrace l = perkdef_list RBrace                                   { annotate_2_code $loc (Ast.Model (i, il, l)) }
+  | Model i = Ident LBrace l = perkdef_list RBrace                                                         { annotate_2_code $loc (Ast.Model (i, [], l)) }
   | Fun pf = perkfun                                                                                       { pf }
-  | Extern id = Ident Colon t = perktype                                                                   { annotate_2_code $loc (Ast.Extern (id, t)) }
+
+command:
+  | ic = InlineC                                                                                           { annotate_2_code $loc (Ast.InlineCCmd(ic)) }
+  | d = perkdef                                                                                            { annotate_2_code $loc (Ast.DefCmd d) }
   | l = expr Assign r = expr                                                                               { annotate_2_code $loc (Ast.Assign (l, r)) }
   | If LParen e = expr RParen LBrace c1 = command RBrace Else LBrace c2 = command RBrace                   { annotate_2_code $loc (Ast.IfThenElse (e, c1, c2)) }
   | If LParen e = expr RParen LBrace c1 = command RBrace                                                   { annotate_2_code $loc (Ast.IfThenElse (e, c1, annotate_dummy Ast.Skip)) }
@@ -85,10 +93,6 @@ command:
   | c1 = command Semicolon                                                                                 { c1 }
   | Skip                                                                                                   { annotate_2_code $loc (Ast.Skip) }
   | Return e = expr                                                                                        { annotate_2_code $loc (Ast.Return (e)) }
-
-  | Archetype i = Ident LBrace l = perkvardesc_list RBrace                                                 { annotate_2_code $loc (Ast.Archetype (i, l)) }
-  | Model i = Ident Colon il = ident_list LBrace l = perkdef_list RBrace                                   { annotate_2_code $loc (Ast.Model (i, il, l)) }
-  | Model i = Ident LBrace l = perkdef_list RBrace                                                         { annotate_2_code $loc (Ast.Model (i, [], l)) }
   | Banish i = Ident                                                                                       { annotate_2_code $loc (Banish i) }
 
 

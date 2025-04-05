@@ -122,17 +122,9 @@ and expr_t =
 
 (* Syntax of the language *)
 and command_t =
-  | Import of string
-  | InlineC of string
+  | InlineCCmd of string
+  | DefCmd of perkdef
   | Block of command_a
-  | Def of perkdef
-  | Fundef of
-      perktype
-      * perkident
-      * perkvardesc list
-      * command_a (* return, name, args, body *)
-  (* | Classdecl of perklass *)
-  | Extern of perkident * perktype
   | Assign of (expr_a * expr_a)
   | Seq of command_a * command_a
   | IfThenElse of expr_a * command_a * command_a
@@ -142,11 +134,23 @@ and command_t =
   | Expr of expr_a
   | Switch of expr_a * (expr_a * command_a) list
   | Skip
-  | Archetype of perkident * perkdecl list
-  | Model of perkident * perkident list * perkdef list
   | Banish of perkident
   | Return of expr_a
 [@@deriving show]
 
+and topleveldef_t =
+  | InlineC of string
+  | Import of string
+  | Extern of perkident * perktype
+  | Def of perkdef
+  | Fundef of
+      perktype
+      * perkident
+      * perkvardesc list
+      * command_a (* return, name, args, body *)
+  | Archetype of perkident * perkdecl list
+  | Model of perkident * perkident list * perkdef list
+
 and expr_a = expr_t annotated [@@deriving show]
 and command_a = command_t annotated [@@deriving show]
+and topleveldef_a = topleveldef_t annotated [@@deriving show]

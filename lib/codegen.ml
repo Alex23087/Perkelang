@@ -1,5 +1,6 @@
 open Ast
 open Errors
+open Symbol_table
 
 exception TypeError of string
 
@@ -16,29 +17,6 @@ let fresh_var (s : string) : string =
   fresh_var_counter := v + 1;
   Printf.sprintf "__perkelang_%s_%d" s v
 
-let rec type_descriptor_of_perktype (t : perktype) : string =
-  let _, t, _ = t in
-  match t with
-  | Basetype s -> s
-  | Structtype s -> "struct_" ^ s
-  | Funtype (args, ret) ->
-      let args_str =
-        String.concat "__" (List.map type_descriptor_of_perktype args)
-      in
-      Printf.sprintf "l_%s_to_%s_r" args_str (type_descriptor_of_perktype ret)
-  | Pointertype t -> Printf.sprintf "%s_ptr" (type_descriptor_of_perktype t)
-  | Arraytype (t, _) -> Printf.sprintf "%s_arr" (type_descriptor_of_perktype t)
-  | Vararg ->
-      "vararg"
-      (* This is probably problematic, cannot define function pointers with ... . Nvm, apparently you can 😕*)
-  | ArcheType (name, _decls) -> name
-  | Modeltype (name, _archs, _decls, _constr_params) -> name
-  | Optiontype t -> Printf.sprintf "%s_opt" (type_descriptor_of_perktype t)
-  | Infer -> failwith "Impossible: type has not been inferred"
-  | Tupletype ts ->
-      Printf.sprintf "begintup_%s_endtup"
-        (String.concat "__" (List.map type_descriptor_of_perktype ts))
-
 let function_type_hashmap : (perktype, string * string * string) Hashtbl.t =
   Hashtbl.create 10
 
@@ -52,8 +30,12 @@ let archetype_hashtable : (string, (string, perktype) Hashtbl.t) Hashtbl.t =
 
 let struct_def_list : string list ref = ref []
 
-let add_struct_def (code : string) : unit =
-  struct_def_list := code :: !struct_def_list
+let add_struct_def (_typ : perktype) (code : string) : unit =
+  struct_def_list := code :: !struct_def_list;
+  bind_type_if_needed _typ;
+  let key = type_descriptor_of_perktype _typ in
+  let _t, _code, _deps = Hashtbl.find type_symbol_table key in
+  Hashtbl.replace type_symbol_table key (_t, Some code, _deps)
 
 let add_archetype (name : string) : (string, perktype) Hashtbl.t =
   let new_archetype = Hashtbl.create 10 in
@@ -74,8 +56,9 @@ let add_import (lib : string) : unit =
   if not (List.mem lib !import_list) then import_list := lib :: !import_list
 
 let rec get_tuple (t : perktype) : string =
-  try Hashtbl.find tuple_hashmap t
-  with Not_found -> (
+  try
+    let key = type_descriptor_of_perktype t in
+    let _t, _code, _deps = Hashtbl.find type_symbol_table key in
     match t with
     | _, Tupletype ts, _ ->
         let type_str = type_descriptor_of_perktype t in
@@ -91,15 +74,21 @@ let rec get_tuple (t : perktype) : string =
             type_str
         in
         Hashtbl.add tuple_hashmap t compiled;
+        Hashtbl.replace type_symbol_table key (_t, Some compiled, _deps);
         type_str
     | _ ->
         failwith
           (Printf.sprintf "get_tuple: not a tuple type, got %s"
-             (type_descriptor_of_perktype t)))
+             (type_descriptor_of_perktype t))
+  with Not_found ->
+    bind_type_if_needed t;
+    Printf.printf "get_tuple: not found in tuple_hashmap\n";
+    get_tuple t
 
 and get_function_type (t : perktype) : string * string * string =
-  try Hashtbl.find function_type_hashmap t
-  with Not_found -> (
+  try
+    let key = type_descriptor_of_perktype t in
+    let _typ, _code, _deps = Hashtbl.find type_symbol_table key in
     let _, t', _ = t in
     (*TODO: Implement type attribs and qualifiers*)
     match t' with
@@ -110,7 +99,7 @@ and get_function_type (t : perktype) : string * string * string =
             (codegen_type ret ^ " (*" ^ type_str ^ ")("
             ^ String.concat ", "
                 (List.map (fun t -> codegen_type t ~expand:true) args)
-            ^ ")")
+            ^ ");")
         in
         let expanded_str =
           Printf.sprintf "%s"
@@ -119,9 +108,15 @@ and get_function_type (t : perktype) : string * string * string =
                 (List.map (fun t -> codegen_type t ~expand:false) args)
             ^ ")")
         in
-        Hashtbl.add function_type_hashmap t (type_str, typedef_str, expanded_str);
+        Hashtbl.replace type_symbol_table key (_typ, Some typedef_str, _deps);
+        (* Hashtbl.add function_type_hashmap t (type_str, typedef_str, expanded_str); *)
         (type_str, typedef_str, expanded_str)
-    | _ -> failwith "get_function_type: not a function type")
+    | _ -> failwith "get_function_type: not a function type"
+  with Not_found ->
+    bind_type_if_needed t;
+    (* Printf.printf "get_function_type: '%s' not found in function_type_hashmap\n"
+      (type_descriptor_of_perktype t); *)
+    get_function_type t
 
 and get_lambda (e : expr_a) : string * string =
   try Hashtbl.find lambdas_hashmap e
@@ -155,38 +150,49 @@ and put_symbol (ident : perkident) (typ : perktype) : unit =
     ()
   with Not_found -> Hashtbl.add symbol_table ident typ
 
-and codegen_program (cmd : command_a) : string =
-  let body = codegen_command cmd 0 in
+and codegen_program (tldfs : topleveldef_a list) : string =
+  let body =
+    String.concat "\n"
+      (List.map
+         (fun tldf ->
+           let code = codegen_topleveldef tldf in
+           if String.length code = 0 then "" else Printf.sprintf "%s\n" code)
+         tldfs)
+    |> String.trim
+  in
   (* Write includes *)
   String.concat "\n"
     (List.map (fun lib -> Printf.sprintf "#include %s" lib) !import_list)
   ^ "\n\n"
-  (* Write typedefs *)
-  ^ Hashtbl.fold
+  (* Write typedefs for functions*)
+  (* ^ Hashtbl.fold
       (fun _ v acc -> Printf.sprintf "%s%s;\n" acc (snd_3 v))
       function_type_hashmap ""
-  ^ "\n"
+  ^ "\n" *)
   (* Write typedefs for tuples *)
-  ^ Hashtbl.fold
+  (* ^ Hashtbl.fold
       (fun _ v acc -> Printf.sprintf "%s%s;\n" acc v)
-      tuple_hashmap ""
+      tuple_hashmap "" *)
   (* Write struct definitions *)
-  ^ String.concat "\n" (List.rev !struct_def_list)
-  ^ "\n\n"
+  (* ^ String.concat "\n" (List.rev !struct_def_list)
+  ^ "\n\n" *)
+  ^ generate_types ()
   (* Write hoisted function signatures *)
   ^ Hashtbl.fold
       (fun id typ acc -> Printf.sprintf "%s%s;\n" acc (codegen_fundecl id typ))
       symbol_table ""
-  ^ "\n" ^ body ^ "\n"
-  ^
   (* Write lambdas *)
-  Hashtbl.fold
-    (fun _ v acc -> Printf.sprintf "%s\n%s\n" acc (snd v))
-    lambdas_hashmap ""
+  ^ Hashtbl.fold
+      (fun _ v acc -> Printf.sprintf "%s\n%s\n" acc (snd v))
+      lambdas_hashmap ""
+  (* Write program code *)
+  ^ "\n"
+  ^ body
 
-and codegen_command (cmd : command_a) (indentation : int) : string =
-  let indent_string = String.make (4 * indentation) ' ' in
-  match ( $ ) cmd with
+and codegen_topleveldef (tldf : topleveldef_a) : string =
+  let indent_string = "" in
+  (*TODO: Remove*)
+  match ( $ ) tldf with
   | Archetype (i, l) ->
       let _ = add_archetype i in
       List.iter
@@ -195,7 +201,8 @@ and codegen_command (cmd : command_a) (indentation : int) : string =
           add_binding_to_archetype i id typ)
         l;
       add_struct_def
-        (Printf.sprintf "%sstruct %s {\n%s\n};\n" indent_string i
+        ([], ArcheType (i, l), [])
+        (Printf.sprintf "\n%sstruct %s {\n%s\n};\n" indent_string i
            (if List.length l = 0 then ""
             else
               (indent_string ^ "    "
@@ -240,7 +247,7 @@ and codegen_command (cmd : command_a) (indentation : int) : string =
           archetype_decls
       in
       if not has_all_the_right_things then
-        let line, col = (( @@ ) cmd).start_pos in
+        let line, col = (( @@ ) tldf).start_pos in
         raise
           (Type_error
              ( line,
@@ -260,15 +267,37 @@ and codegen_command (cmd : command_a) (indentation : int) : string =
               match (typ, ( $ ) expr) with
               | ( (attrs, Funtype (params, ret), specs),
                   Lambda (lret, lparams, lexpr) ) ->
-                  ( ((attrs, Funtype (selftype :: params, ret), specs), id),
-                    annotate_dummy
-                      (Lambda (lret, (selftype, "self") :: lparams, lexpr)) )
+                  let (typ, id), expr =
+                    ( ((attrs, Funtype (selftype :: params, ret), specs), id),
+                      annotate_dummy
+                        (Lambda (lret, (selftype, "self") :: lparams, lexpr)) )
+                  in
+                  ignore (get_function_type typ);
+                  ((typ, id), expr)
               | _ -> ((typ, id), expr))
             defs
         in
         let mems = List.map (fun ((typ, id), _) -> (typ, id)) defs in
+        let params_str_with_types, params_str, params_typ =
+          match constructor with
+          | None -> ("", "", [])
+          | Some ((typ, _), _) -> (
+              match typ with
+              | _, Funtype (params, _), _ ->
+                  ( String.concat ", "
+                      (List.mapi
+                         (fun (i : int) (t : perktype) ->
+                           Printf.sprintf "%s arg_%d" (codegen_type t) i)
+                         params),
+                    String.concat ", "
+                      (List.mapi (fun i _ -> Printf.sprintf "arg_%d" i) params),
+                    params )
+              | _ -> raise (TypeError "Constructor is not a function type"))
+        in
         add_struct_def
-          (Printf.sprintf "%sstruct %s {\n%s%s\n};\n%stypedef struct %s* %s;\n"
+          ([], Modeltype (name, il, List.map fst defs, params_typ), [])
+          (Printf.sprintf
+             "\n%sstruct %s {\n%s%s\n};\n%stypedef struct %s* %s;\n"
              indent_string name
              (if List.length mems = 0 then ""
               else
@@ -287,22 +316,6 @@ and codegen_command (cmd : command_a) (indentation : int) : string =
                            (indent_string ^ "    ") s s)
                        il))
              indent_string name name);
-        let params_str_with_types, params_str =
-          match constructor with
-          | None -> ("", "")
-          | Some ((typ, _), _) -> (
-              match typ with
-              | _, Funtype (params, _), _ ->
-                  ( String.concat ", "
-                      (List.mapi
-                         (fun (i : int) (t : perktype) ->
-                           Printf.sprintf "%s arg_%d" (codegen_type t) i)
-                         params),
-                    String.concat ", "
-                      (List.mapi (fun i _ -> Printf.sprintf "arg_%d" i) params)
-                  )
-              | _ -> raise (TypeError "Constructor is not a function type"))
-        in
         let params_str = if params_str = "" then "" else ", " ^ params_str in
         (* TODO: Add error locations *)
         Printf.sprintf
@@ -311,7 +324,7 @@ and codegen_command (cmd : command_a) (indentation : int) : string =
           \    %s%s self = obj;\n\
            %s\n\
            %s    %sreturn obj;\n\
-           }\n"
+           }"
           indent_string name name params_str_with_types indent_string name name
           indent_string name
           (if List.length mems = 0 then ""
@@ -332,15 +345,23 @@ and codegen_command (cmd : command_a) (indentation : int) : string =
                 params_str)
           indent_string
   | InlineC s -> s
+  | Fundef (t, id, args, body) -> indent_string ^ codegen_fundef t id args body
+  | Extern _ -> ""
+  (* Externs are only useful for type checking. No need to keep it for codegen step *)
+  | Def (t, e) -> indent_string ^ codegen_def t e
+  | Import lib ->
+      add_import lib;
+      ""
+
+and codegen_command (cmd : command_a) (indentation : int) : string =
+  let indent_string = String.make (4 * indentation) ' ' in
+  match ( $ ) cmd with
+  | InlineCCmd s -> s
   | Block c ->
       indent_string ^ "{\n"
       ^ codegen_command c (indentation + 1)
       ^ "\n" ^ indent_string ^ "}"
-  | Def (t, e) -> indent_string ^ codegen_def t e
-  | Fundef (t, id, args, body) -> indent_string ^ codegen_fundef t id args body
-  | Extern _ ->
-      ""
-      (* Externs are only useful for type checking. No need to keep it for codegen step *)
+  | DefCmd (t, e) -> indent_string ^ codegen_def t e
   | Assign (l, r) ->
       indent_string
       ^ Printf.sprintf "%s = %s;" (codegen_expr l) (codegen_expr r)
@@ -400,9 +421,6 @@ and codegen_command (cmd : command_a) (indentation : int) : string =
       indent_string
       ^ Printf.sprintf "switch (%s) {\n%s\n%s}" (codegen_expr e) cases_str
           indent_string
-  | Import lib ->
-      add_import lib;
-      ""
   | Banish name ->
       (* TODO: Automatically banish children *)
       Printf.sprintf "%sfree(%s);\n%s%s = NULL;" indent_string name
@@ -553,3 +571,34 @@ and codegen_fundecl (id : perkident) (typ : perktype) : string =
     | _ -> failwith "codegen_fundecl: called with a non function type"
   in
   if attrs_str = "" then type_str else Printf.sprintf "%s %s" attrs_str type_str
+
+and generate_types () =
+  let out = ref "" in
+  let ft_list =
+    ref (Hashtbl.fold (fun k v acc -> (k, v) :: acc) type_symbol_table [])
+  in
+  let sortfun =
+   fun (_, (_, _, d_a)) (_, (_, _, d_b)) ->
+    compare (List.length d_a) (List.length d_b)
+  in
+  ft_list := List.sort sortfun !ft_list;
+  while List.length !ft_list > 0 do
+    (* Printf.printf "%s\n\n"
+      (Printf.sprintf "%s: %s"
+         (List.hd (List.map fst !ft_list))
+         (List.hd
+            (List.map (fun (_, (_, _, d)) -> String.concat ", " d) !ft_list))); *)
+    let _id, (_typ, _code, _deps) = List.hd !ft_list in
+    ft_list := List.tl !ft_list;
+    (* Remove dzpendency from other elements *)
+    ft_list :=
+      List.sort sortfun
+        (List.map
+           (fun (_i, (_typ, _code, _deps)) ->
+             (_i, (_typ, _code, List.filter (fun id -> id <> _id) _deps)))
+           !ft_list);
+    match _code with
+    | Some c -> out := Printf.sprintf "%s%s\n" !out c
+    | None -> ()
+  done;
+  !out

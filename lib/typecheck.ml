@@ -1,15 +1,19 @@
 open Ast
 open Errors
+open Symbol_table
 
 let raise_type_error (node : 'a annotated) (msg : string) =
   let line, col = (( @@ ) node).start_pos in
   raise (Type_error (line, col, msg))
 
-let symbol_table : (perkident, perktype) Hashtbl.t list ref = ref []
-let push_symbol_table () = symbol_table := Hashtbl.create 10 :: !symbol_table
-let pop_symbol_table () = symbol_table := List.tl !symbol_table
+let var_symbol_table : (perkident, perktype) Hashtbl.t list ref = ref []
 
-let lookup_symbol_table (id : perkident) : perktype option =
+let push_symbol_table () =
+  var_symbol_table := Hashtbl.create 10 :: !var_symbol_table
+
+let pop_symbol_table () = var_symbol_table := List.tl !var_symbol_table
+
+let lookup_var (id : perkident) : perktype option =
   let rec lookup_in_tables tables =
     match tables with
     | [] -> None
@@ -17,13 +21,7 @@ let lookup_symbol_table (id : perkident) : perktype option =
         if Hashtbl.mem h id then Some (Hashtbl.find h id)
         else lookup_in_tables t
   in
-  lookup_in_tables !symbol_table
-
-let lookup_var (id : perkident) : perktype option =
-  lookup_symbol_table ("I_" ^ id)
-
-let lookup_type (id : perkident) : perktype option =
-  lookup_symbol_table ("T_" ^ id)
+  lookup_in_tables !var_symbol_table
 
 let print_symbol_table () =
   Printf.printf "Symbol Table:\n";
@@ -33,96 +31,75 @@ let print_symbol_table () =
         Printf.printf "Identifier: %s, Type: %s\n" id (Codegen.codegen_type typ))
       table
   in
-  List.iter print_table !symbol_table
+  List.iter print_table !var_symbol_table
 
-let bind_ident (id : perkident) (t : perktype) =
-  match !symbol_table with
+let bind_var (id : perkident) (t : perktype) =
+  match !var_symbol_table with
   | [] -> failwith "No symbol table available"
   | h :: _ ->
       if Hashtbl.mem h id then
         raise (Double_declaration ("Identifier already defined: " ^ id))
-      else Hashtbl.add h id t;
-      print_symbol_table ()
+      else Hashtbl.add h id t
+(* ;print_symbol_table () *)
 
-let bind_var (id : perkident) (t : perktype) = bind_ident ("I_" ^ id) t
-let bind_type (id : perkident) (t : perktype) = bind_ident ("T_" ^ id) t
-
-let rec typecheck_program (ast : command_a) : command_a =
+let rec typecheck_program (ast : topleveldef_a list) : topleveldef_a list =
   push_symbol_table ();
-  let res = typecheck_command ast in
-  print_symbol_table ();
+  let res = List.map typecheck_topleveldef ast in
+  (* Will it do it in the right order?? *)
+  (* print_symbol_table ();
+  print_type_symbol_table (); *)
   res
 
-and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
-    command_a =
-  match ( $ ) cmd with
-  | Import _ -> cmd
-  | InlineC _ -> cmd
-  | Block c ->
-      push_symbol_table ();
-      let c_res = typecheck_command ~retype c in
-      pop_symbol_table ();
-      annot_copy cmd (Block c_res)
+and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
+  match ( $ ) tldf with
+  | Import _ -> tldf
+  | InlineC _ -> tldf
   | Def ((typ, id), expr) ->
       let typ' = resolve_type typ in
       let expr_res, expr_type = typecheck_expr expr in
       let typ'' =
         try match_types typ' expr_type
-        with Type_match_error msg -> raise_type_error cmd msg
+        with Type_match_error msg -> raise_type_error tldf msg
       in
       (* Check if the type is a user-defined type *)
       bind_var id typ'';
-      annot_copy cmd (Def ((typ'', id), expr_res))
+      annot_copy tldf (Def ((typ'', id), expr_res))
   | Fundef (ret_type, id, params, body) ->
       push_symbol_table ();
       List.iter
         (fun (typ, id) ->
           try bind_var id typ
-          with Double_declaration msg -> raise_type_error cmd msg)
+          with Double_declaration msg -> raise_type_error tldf msg)
         params;
       let body_res = typecheck_command ~retype:(Some ret_type) body in
       pop_symbol_table ();
-      bind_var id
-        ([], Funtype (List.map (fun (typ, _) -> typ) params, ret_type), []);
-      annot_copy cmd (Fundef (ret_type, id, params, body_res))
+      let funtype =
+        ([], Funtype (List.map (fun (typ, _) -> typ) params, ret_type), [])
+      in
+      bind_var id funtype;
+      bind_type (type_descriptor_of_perktype funtype) funtype;
+      annot_copy tldf (Fundef (ret_type, id, params, body_res))
   | Extern (id, typ) ->
       (match lookup_var id with
       | Some _ ->
-          raise_type_error cmd
+          raise_type_error tldf
             (Printf.sprintf "Identifier %s is already defined" id)
       | None -> ());
       bind_var id typ;
-      annotate_dummy Skip
+      bind_type_if_needed typ;
+      tldf
+      (* annotate_dummy Skip *)
       (* Externs are only useful for type checking. No need to keep it for codegen step *)
-  | Assign (lhs, rhs) ->
-      let lhs_res, lhs_type = typecheck_expr lhs in
-      let rhs_res, rhs_type = typecheck_expr rhs in
-      let _ =
-        try match_types lhs_type rhs_type
-        with Type_match_error msg -> raise_type_error cmd msg
-      in
-      annot_copy cmd (Assign (lhs_res, rhs_res))
-  | Seq (c1, c2) ->
-      let c1_res = typecheck_command ~retype c1 in
-      let c2_res = typecheck_command ~retype c2 in
-      annot_copy cmd (Seq (c1_res, c2_res))
-  | IfThenElse _ -> cmd
-  | Whiledo _ -> cmd
-  | Dowhile _ -> cmd
-  | For _ -> cmd
-  | Expr e -> annot_copy cmd (Expr (fst (typecheck_expr e)))
-  | Switch _ -> cmd
-  | Skip -> cmd
   | Archetype (name, decls) ->
       (try bind_type name ([], ArcheType (name, decls), [])
-       with Double_declaration msg -> raise_type_error cmd msg);
-      cmd
+       with Double_declaration msg -> raise_type_error tldf msg);
+      tldf
   | Model (ident, archetypes, fields) ->
       (* Check that the model is not already defined *)
       (let m = lookup_type ident in
        match m with
        | Some _ ->
-           raise_type_error cmd
+           raise_type_error tldf
              (Printf.sprintf "Model %s is already defined" ident)
        | None -> ());
       (* Get implemented archetypes *)
@@ -134,12 +111,12 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
                 match t with
                 | _, ArcheType _, _ -> t
                 | _ ->
-                    raise_type_error cmd
+                    raise_type_error tldf
                       (Printf.sprintf
                          "Model %s is trying to implement non-archetype %s"
                          ident a))
             | None ->
-                raise_type_error cmd
+                raise_type_error tldf
                   (Printf.sprintf
                      "Model %s implements non-existent Archetype %s" ident a))
           archetypes
@@ -177,7 +154,7 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
           with
           | true -> ()
           | false ->
-              raise_type_error cmd
+              raise_type_error tldf
                 (Printf.sprintf
                    "Model %s is missing required field %s of type %s, declared \
                     in archetype %s"
@@ -196,7 +173,7 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
             (* Check that constructor returns void *)
             let _ =
               try match_types ([], Basetype "void", []) ret
-              with Type_match_error msg -> raise_type_error cmd msg
+              with Type_match_error msg -> raise_type_error tldf msg
             in
             params
         | Some (((_, Infer, _), _), expr) -> (
@@ -205,7 +182,7 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
             | Funtype (params, ret) ->
                 let _ =
                   try match_types ([], Basetype "void", []) ret
-                  with Type_match_error msg -> raise_type_error cmd msg
+                  with Type_match_error msg -> raise_type_error tldf msg
                 in
                 params
             | _ -> raise_type_error expr "constructor should be a function")
@@ -235,11 +212,50 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
       in
       pop_symbol_table ();
       (* Add model to the symbol table *)
-      bind_type ident
+      bind_type_if_needed
         ( [],
           Modeltype (ident, archetypes, List.map fst fields_res, constr_params),
           [] );
-      annot_copy cmd (Model (ident, archetypes, fields_res))
+      annot_copy tldf (Model (ident, archetypes, fields_res))
+
+and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
+    command_a =
+  match ( $ ) cmd with
+  | InlineCCmd _ -> cmd
+  | Block c ->
+      push_symbol_table ();
+      let c_res = typecheck_command ~retype c in
+      pop_symbol_table ();
+      annot_copy cmd (Block c_res)
+  | DefCmd ((typ, id), expr) ->
+      let typ' = resolve_type typ in
+      let expr_res, expr_type = typecheck_expr expr in
+      let typ'' =
+        try match_types typ' expr_type
+        with Type_match_error msg -> raise_type_error cmd msg
+      in
+      bind_type_if_needed typ'';
+      bind_var id typ'';
+      annot_copy cmd (DefCmd ((typ'', id), expr_res))
+  | Assign (lhs, rhs) ->
+      let lhs_res, lhs_type = typecheck_expr lhs in
+      let rhs_res, rhs_type = typecheck_expr rhs in
+      let _ =
+        try match_types lhs_type rhs_type
+        with Type_match_error msg -> raise_type_error cmd msg
+      in
+      annot_copy cmd (Assign (lhs_res, rhs_res))
+  | Seq (c1, c2) ->
+      let c1_res = typecheck_command ~retype c1 in
+      let c2_res = typecheck_command ~retype c2 in
+      annot_copy cmd (Seq (c1_res, c2_res))
+  | IfThenElse _ -> cmd
+  | Whiledo _ -> cmd
+  | Dowhile _ -> cmd
+  | For _ -> cmd
+  | Expr e -> annot_copy cmd (Expr (fst (typecheck_expr e)))
+  | Switch _ -> cmd
+  | Skip -> cmd
   | Banish _ -> cmd
   | Return e ->
       let e_res, e_type = typecheck_expr e in
@@ -295,9 +311,12 @@ and typecheck_expr (expr : expr_a) : expr_a * perktype =
           with Double_declaration msg -> raise_type_error expr msg)
         params;
       let body_res = typecheck_command ~retype:(Some retype) body in
+      let lamtype =
+        ([], Funtype (List.map (fun (typ, _) -> typ) params, retype), [])
+      in
       pop_symbol_table ();
-      ( annot_copy expr (Lambda (retype, params, body_res)),
-        ([], Funtype (List.map (fun (typ, _) -> typ) params, retype), []) )
+      bind_type_if_needed lamtype;
+      (annot_copy expr (Lambda (retype, params, body_res)), lamtype)
   | PostUnop _ -> failwith "postu"
   | Parenthesised _ -> failwith "par"
   | Subscript (container, accessor) -> (
@@ -362,8 +381,9 @@ and typecheck_expr (expr : expr_a) : expr_a * perktype =
   | Tuple (exprs, _) ->
       let exprs_res = List.map typecheck_expr exprs in
       let types = List.map snd exprs_res in
-      ( annot_copy expr
-          (Tuple (List.map fst exprs_res, Some ([], Tupletype types, []))),
+      let tupletype = ([], Tupletype types, []) in
+      bind_type_if_needed tupletype;
+      ( annot_copy expr (Tuple (List.map fst exprs_res, Some tupletype)),
         ([], Tupletype types, []) )
   | TupleSubscript _ ->
       failwith
@@ -460,27 +480,3 @@ and match_type_list (expected : perktype list)
         typ :: match_type_list_aux et at
   in
   match_type_list_aux expected actual
-
-and resolve_type (typ : perktype) : perktype =
-  let attrs, typ', quals = typ in
-  ( attrs,
-    (match typ' with
-    | Basetype t -> (
-        match lookup_type t with None -> typ' | Some (_, t, _) -> t)
-    | Pointertype t -> Pointertype (resolve_type t)
-    | Funtype (params, ret) ->
-        Funtype (List.map resolve_type params, resolve_type ret)
-    | Arraytype (t, n) -> Arraytype (resolve_type t, n)
-    | Structtype t -> (
-        match lookup_type t with None -> typ' | Some (_, t, _) -> t)
-    | ArcheType (name, decls) ->
-        let decls' = List.map (fun (t, id) -> (resolve_type t, id)) decls in
-        ArcheType (name, decls')
-    | Modeltype (name, archetypes, decls, constr_params) ->
-        let decls' = List.map (fun (t, id) -> (resolve_type t, id)) decls in
-        Modeltype (name, archetypes, decls', constr_params)
-    | Optiontype t -> Optiontype (resolve_type t)
-    | Tupletype t -> Tupletype (List.map resolve_type t)
-    | Vararg -> Vararg
-    | Infer -> Infer),
-    quals )

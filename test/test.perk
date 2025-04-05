@@ -18,7 +18,7 @@ model Button: UIElement {
     let constructor := (posx: float, posy: float): void => {
         self.posx = posx;
         self.posy = posy;
-    },  
+    },
     
     let posx : float = 0.,
     let posy : float = 0.,
@@ -28,17 +28,9 @@ model Button: UIElement {
     let where_am_i := () : (float * float) => {
         return (self.posx, self.posy);
     },
-
+    
     let draw := () : void => {
-        printf("drawn button at (%f, %f)\n", self.posx, self.pos[1]);
-
-        let x := 10;
-
-        let f := () : int => {
-            return x + 1;
-        };
-
-        f();
+        printf("drawn button at (%f, %f)\n", self.posx, self.pos[1])
     }
 };
 
@@ -46,4 +38,4 @@ fun main(): int {
     let but := summon Button(10., 0.);
     but.draw();
     banish but
-};
+}
