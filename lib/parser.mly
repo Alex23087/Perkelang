@@ -141,8 +141,8 @@ expr:
   | Summon i = Ident LParen l = expr_list RParen                                                           { annotate_2_code $loc (Summon (i, l)) }
   | Summon i = Ident LParen RParen                                                                         { annotate_2_code $loc (Summon (i, [])) }
   | e1 = expr Dot i = Ident                                                                                { annotate_2_code $loc (Ast.Access (e1, i, None)) }
-  // | Nothing                                                                                                { annotate_2_code $loc (Ast.Nothing Ast.Infer) }
-  // | Something e = expr                                                                                     { annotate_2_code $loc (Ast.Something (e, Ast.Infer)) }
+  | Nothing                                                                                                { annotate_2_code $loc (Ast.Nothing ([], Ast.Infer, [])) }
+  | Something e = expr                                                                                     { annotate_2_code $loc (Ast.Something (e, ([], Ast.Infer, []))) }
   | LParen RParen                                                                                          { annotate_2_code $loc (Ast.Tuple ([], None)) }
   | LParen e = expr_list RParen                                                                            { annotate_2_code $loc (Ast.Tuple (e, None)) }
   | id = Ident As tl = separated_nonempty_list (Plus, perktype)                                            { annotate_2_code $loc (Ast.As (id, tl)) }

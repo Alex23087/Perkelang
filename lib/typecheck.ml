@@ -256,6 +256,7 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
   | DefCmd (((typ, id), expr), _) ->
       let typ' = resolve_type typ in
       let expr_res, expr_type = typecheck_expr expr in
+      let expr_res, expr_type = fill_nothing expr_res expr_type typ' in
       let typ'' =
         try match_types ~coalesce:true typ' expr_type
         with Type_match_error msg -> raise_type_error cmd msg
@@ -277,6 +278,7 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
   | Assign (lhs, rhs, _, _) ->
       let lhs_res, lhs_type = typecheck_expr lhs in
       let rhs_res, rhs_type = typecheck_expr rhs in
+      let rhs_res, rhs_type = fill_nothing rhs_res rhs_type lhs_type in
       let exprval =
         try match_types ~coalesce:true lhs_type rhs_type
         with Type_match_error msg -> raise_type_error cmd msg
@@ -341,6 +343,11 @@ and typecheck_expr (expr : expr_a) : expr_a * perktype =
       in
       let param_rets = List.map typecheck_expr params in
       let _param_types = match_type_list fun_param_types param_rets in
+      let param_rets =
+        List.map2
+          (fun (e, t1) t2 -> fill_nothing e t1 t2)
+          param_rets _param_types
+      in
       (annot_copy expr (Apply (fun_expr, List.map fst param_rets)), fun_ret_type)
   | Binop (op, lhs, rhs) ->
       let lhs_res, lhs_type = typecheck_expr lhs in
@@ -349,6 +356,8 @@ and typecheck_expr (expr : expr_a) : expr_a * perktype =
         try match_types lhs_type rhs_type
         with Type_match_error msg -> raise_type_error expr msg
       in
+      let lhs_res, _lhs_type = fill_nothing lhs_res lhs_type res_type in
+      let rhs_res, _rhs_type = fill_nothing rhs_res rhs_type res_type in
       (annot_copy expr (Binop (op, lhs_res, rhs_res)), res_type)
   | PreUnop _ -> failwith "preu"
   | Lambda (retype, params, body) ->
@@ -400,6 +409,11 @@ and typecheck_expr (expr : expr_a) : expr_a * perktype =
       | Some (attrs, Modeltype (_name, archetypes, fields, constr_params), specs)
         ->
           let param_rets = List.map typecheck_expr params in
+          let param_rets =
+            List.map2
+              (fun (a, b) c -> fill_nothing a b c)
+              param_rets constr_params
+          in
           let _ = match_type_list constr_params param_rets in
           ( annot_copy expr (Summon (typeid, List.map fst param_rets)),
             (attrs, Modeltype (typeid, archetypes, fields, constr_params), specs)
@@ -459,6 +473,8 @@ and typecheck_expr (expr : expr_a) : expr_a * perktype =
       (annot_copy expr (Access (expr_res, ide, access_type)), res_type)
   | Tuple (exprs, _) ->
       let exprs_res = List.map typecheck_expr exprs in
+      let exprs_res = List.map (fun (a, b) -> fill_nothing a b b) exprs_res in
+      (* TODO: This won't work on typles *)
       let types = List.map snd exprs_res in
       let tupletype = ([], Tupletype types, []) in
       bind_type_if_needed tupletype;
@@ -502,6 +518,18 @@ and typecheck_expr (expr : expr_a) : expr_a * perktype =
       | None ->
           raise_type_error expr
             (Printf.sprintf "Identifier %s is not defined" id))
+  | Something (e, _) ->
+      let e_res, e_type = typecheck_expr e in
+      (annot_copy expr (Something (e_res, e_type)), ([], Optiontype e_type, []))
+  | Nothing _ -> (expr, ([], Infer, []))
+
+and fill_nothing (expr : expr_a) (exprtyp : perktype) (typ : perktype) :
+    expr_a * perktype =
+  match (( $ ) expr, typ) with
+  | Nothing _, ([], Optiontype _, []) -> (annot_copy expr (Nothing typ), typ)
+  | Nothing _, _ ->
+      raise_type_error expr "Nothing can only be used with Optiontype"
+  | _ -> (expr, exprtyp)
 
 (* Add more type checking logic as needed: pepperepeppe     peppè! culo*)
 
@@ -559,7 +587,7 @@ and match_types ?(coalesce : bool = false) (expected : perktype)
         in
         ([], Modeltype (name1, archetypes1, decls_types, constr_types), [])
     | Vararg, Vararg -> actual
-    | Infer, _ -> actual
+    | Infer, _ | _, Infer -> actual
     | Optiontype t, Optiontype s -> ([], Optiontype (match_types_aux t s), [])
     | Tupletype t1, Tupletype t2 ->
         ([], Tupletype (List.map2 match_types_aux t1 t2), [])
@@ -572,7 +600,7 @@ and match_types ?(coalesce : bool = false) (expected : perktype)
     | _ ->
         raise
           (Type_match_error
-             (Printf.sprintf "Type mismatch: expected %s, got %s instead"
+             (Printf.sprintf "Type mismatch: expected %s,\ngot %s instead"
                 (* (Codegen.codegen_type ~expand:true expected)
               (Codegen.codegen_type ~expand:true actual))) *)
                 (show_perktype expected)

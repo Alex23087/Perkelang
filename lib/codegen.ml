@@ -93,7 +93,8 @@ and get_option_type (t : perktype) : string =
         let _t, _code, _deps = Hashtbl.find type_symbol_table key in
         let compiled =
           Printf.sprintf "typedef struct %s {int is_some; %s contents;} %s;" key
-            (codegen_type u) key
+            (type_descriptor_of_perktype u)
+            key
         in
         Hashtbl.replace type_symbol_table key (_t, Some compiled, _deps);
         key
@@ -545,6 +546,7 @@ and codegen_fundef (t : perktype) (id : perkident) (args : perkvardesc list)
   Printf.sprintf "%s %s(%s) {\n%s\n}" type_str id args_str body_str
 
 and codegen_type ?(expand : bool = false) (t : perktype) : string =
+  (* Printf.printf "codegen_type: %s\n" (show_perktype t); flush stdout; *)
   let attrs, t', quals = t in
   let attrs_str = String.concat " " (List.map codegen_attr attrs) in
   let quals_str = String.concat " " (List.map codegen_qual quals) in
@@ -649,7 +651,19 @@ and codegen_expr (e : expr_a) : string =
                 typlist)
            ^ ", ")
         id
-(* | Nothing t -> Printf.sprintf "{0, 0}" TODO: Continue here *)
+  | Nothing t -> (
+      match t with
+      | _, Infer, _ ->
+          failwith "Impossible: type for nothing has not been inferred"
+      | t -> Printf.sprintf "((%s) {0, 0})" (get_option_type t))
+  | Something (e, t) -> (
+      match t with
+      | _, Infer, _ ->
+          failwith "Impossible: type for something has not been inferred"
+      | t ->
+          Printf.sprintf "((%s) {1, %s})"
+            (get_option_type ([], Optiontype t, []))
+            (codegen_expr e))
 
 (* struct {int is_empty; int value;} palle = {0,1}; *)
 

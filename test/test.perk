@@ -37,11 +37,13 @@ model Button: UIElement {
     // x->Eq->functia()
 
 }
-
+    
 fun main(): int {
     let but := summon Button(10., 0.);
-    let test : float? = 10.;
-    // let test2 : [Button]? = nothing;
+    let test : float? = some 10.;
+    // let test1 : [Button]? = nothing;
+    // let test2 : Button? = nothing;
+    let bmaybe : float? = nothing;
     let b := (but ~> UIElement);
     b.draw();
     but.draw();

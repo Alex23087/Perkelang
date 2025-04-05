@@ -98,8 +98,8 @@ type perkdef = perkdecl * expr_a [@@deriving show, eq]
 (* name, attributes, methods *)
 (* and perklass = Class of perkident * (perkdef list) * (perkfun list) [@@deriving show, eq] *)
 and expr_t =
-  (* | Nothing of perktype option
-  | Something of expr_a * perktype option *)
+  | Nothing of perktype
+  | Something of expr_a * perktype
   | Int of int
   | Float of float
   | Char of char
