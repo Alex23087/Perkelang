@@ -65,15 +65,15 @@
 /* Grammar specification */
 
 program:
-  | defs = separated_list(Semicolon, topleveldef) option(Semicolon) EOF { defs }
-  | separated_list(Semicolon, topleveldef) error { raise (ParseError("unexpected token after program (Perhaps you forgot a ; ?)")) }
+  | defs = list(topleveldef) EOF                                    { defs }
+  | separated_list(Semicolon, topleveldef) error                                                           { raise (ParseError("unexpected token after program (Perhaps you forgot a ; ?)")) }
 
 topleveldef:
   | Import i = String                                                                                      { annotate_2_code $loc (Ast.Import ("<" ^ i ^ ">")) }
   | Open i = String                                                                                        { annotate_2_code $loc (Ast.Import ("\"" ^ i ^ "\"")) }
   | Extern id = Ident Colon t = perktype                                                                   { annotate_2_code $loc (Ast.Extern (id, t)) }
   | ic = InlineC                                                                                           { annotate_2_code $loc (Ast.InlineC(ic)) }
-  | d = perkdef                                                                                            { annotate_2_code $loc (Ast.Def d) }
+  | d = perkdef                                                                                            { annotate_2_code $loc (Ast.Def (d, None)) }
   | Archetype i = Ident LBrace l = perkvardesc_list RBrace                                                 { annotate_2_code $loc (Ast.Archetype (i, l)) }
   | Model i = Ident Colon il = ident_list LBrace l = perkdef_list RBrace                                   { annotate_2_code $loc (Ast.Model (i, il, l)) }
   | Model i = Ident LBrace l = perkdef_list RBrace                                                         { annotate_2_code $loc (Ast.Model (i, [], l)) }
@@ -81,8 +81,8 @@ topleveldef:
 
 command:
   | ic = InlineC                                                                                           { annotate_2_code $loc (Ast.InlineCCmd(ic)) }
-  | d = perkdef                                                                                            { annotate_2_code $loc (Ast.DefCmd d) }
-  | l = expr Assign r = expr                                                                               { annotate_2_code $loc (Ast.Assign (l, r, None)) }
+  | d = perkdef                                                                                            { annotate_2_code $loc (Ast.DefCmd (d, None)) }
+  | l = expr Assign r = expr                                                                               { annotate_2_code $loc (Ast.Assign (l, r, None, None)) }
   | If LParen e = expr RParen LBrace c1 = command RBrace Else LBrace c2 = command RBrace                   { annotate_2_code $loc (Ast.IfThenElse (e, c1, c2)) }
   | If LParen e = expr RParen LBrace c1 = command RBrace                                                   { annotate_2_code $loc (Ast.IfThenElse (e, c1, annotate_dummy Ast.Skip)) }
   | While LParen e = expr RParen LBrace c = command RBrace                                                 { annotate_2_code $loc (Ast.Whiledo (e, c)) }

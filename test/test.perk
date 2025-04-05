@@ -1,9 +1,9 @@
-import "stdio.h";
-import "stdlib.h";
-import "malloc.h";
-import "stdint.h";
+import "stdio.h"
+import "stdlib.h"
+import "malloc.h"
+import "stdint.h"
 
-extern printf : (char*, ...) -> int;
+extern printf : (char*, ...) -> int
 
 archetype UIElement {
     posx : float,
@@ -12,7 +12,7 @@ archetype UIElement {
     //opt: float?,
 
     draw : () -> void
-};
+}
 
 model Button: UIElement {
     let constructor := (posx: float, posy: float): void => {
@@ -36,21 +36,23 @@ model Button: UIElement {
     // let x = (EqPlusMonad){button->Eq, button->Monad, button->self}
     // x->Eq->functia()
 
-};
-
-fun move(b: <UIElement>, x: float, y: float): void {
-    b.posx = x;
-    b.posy = y;
-};
+}
 
 fun main(): int {
     let but := summon Button(10., 0.);
+    let test : float? = 10.;
+    // let test2 : [Button]? = nothing;
     let b := (but ~> UIElement);
     b.draw();
     but.draw();
     move(b, 20., 30.);
-    but.pos = (but.posx, but.posy);
+    but.pos = but.where_am_i();
     b.draw();
     but.draw();
-    banish but
+    banish but;
+}
+
+fun move(b: <UIElement>, x: float, y: float): void {
+    b.posx = x;
+    b.posy = y;
 }

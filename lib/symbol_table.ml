@@ -1,4 +1,5 @@
 open Ast
+open Errors
 
 let type_symbol_table :
     (perkident, perktype * string option * perkident list) Hashtbl.t =
@@ -74,6 +75,11 @@ let rec bind_type (id : perkident) (t : perktype) =
   if not (Hashtbl.mem type_symbol_table id) then
     Hashtbl.add type_symbol_table id (t, None, dependencies_of_type t)
 
+and rebind_type (id : perkident) (t : perktype) =
+  if Hashtbl.mem type_symbol_table id then
+    Hashtbl.replace type_symbol_table id (t, None, dependencies_of_type t)
+  else raise (Undeclared ("Type not found in symbol table: " ^ id))
+
 and dependencies_of_type (typ : perktype) : perkident list =
   let rec dependencies_of_type_aux typ =
     let typ = resolve_type typ in
@@ -145,7 +151,9 @@ let rec bind_type_if_needed (typ : perktype) =
       bind_type name typ';
       List.iter (fun (typ, _id) -> bind_type_if_needed typ) decls;
       List.iter (fun typ -> bind_type_if_needed typ) constr_params
-  | _, Optiontype t, _ -> bind_type_if_needed t
+  | _, Optiontype t, _ ->
+      bind_type (type_descriptor_of_perktype typ') typ';
+      bind_type_if_needed t
   | _, Tupletype ts, _ ->
       bind_type (type_descriptor_of_perktype typ') typ';
       List.iter bind_type_if_needed ts

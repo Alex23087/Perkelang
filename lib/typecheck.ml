@@ -41,28 +41,24 @@ let bind_var (id : perkident) (t : perktype) =
       else Hashtbl.add h id t
 (* ;print_symbol_table () *)
 
+let rebind_var (id : perkident) (t : perktype) =
+  match !var_symbol_table with
+  | [] -> failwith "No symbol table available"
+  | h :: _ ->
+      if Hashtbl.mem h id then Hashtbl.replace h id t
+      else raise (Undeclared ("Identifier wasn't defined: " ^ id))
+
 let rec typecheck_program (ast : topleveldef_a list) : topleveldef_a list =
   push_symbol_table ();
   let res = List.map typecheck_topleveldef ast in
+  let res = List.map typecheck_deferred_function res in
   (* Will it do it in the right order?? *)
   (* print_symbol_table ();
   print_type_symbol_table (); *)
   res
 
-and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
+and typecheck_deferred_function (tldf : topleveldef_a) : topleveldef_a =
   match ( $ ) tldf with
-  | Import _ -> tldf
-  | InlineC _ -> tldf
-  | Def ((typ, id), expr) ->
-      let typ' = resolve_type typ in
-      let expr_res, expr_type = typecheck_expr expr in
-      let typ'' =
-        try match_types typ' expr_type
-        with Type_match_error msg -> raise_type_error tldf msg
-      in
-      (* Check if the type is a user-defined type *)
-      bind_var id typ'';
-      annot_copy tldf (Def ((typ'', id), expr_res))
   | Fundef (ret_type, id, params, body) ->
       push_symbol_table ();
       List.iter
@@ -75,9 +71,40 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
       let funtype =
         ([], Funtype (List.map (fun (typ, _) -> typ) params, ret_type), [])
       in
+      rebind_var id funtype;
+      rebind_type (type_descriptor_of_perktype funtype) funtype;
+      annot_copy tldf (Fundef (ret_type, id, params, body_res))
+  | _ -> tldf
+
+and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
+  match ( $ ) tldf with
+  | Import _ -> tldf
+  | InlineC _ -> tldf
+  | Def (((typ, id), expr), _) ->
+      let typ' = resolve_type typ in
+      let expr_res, expr_type = typecheck_expr expr in
+      let typ'' =
+        try match_types ~coalesce:true typ' expr_type
+        with Type_match_error msg -> raise_type_error tldf msg
+      in
+      let typ''_nocoal =
+        try match_types ~coalesce:false typ' expr_type
+        with Type_match_error _ -> ([], Infer, [])
+      in
+      let deftype =
+        if equal_perktype typ'' typ''_nocoal then None else Some typ''
+      in
+      (* Check if the type is a user-defined type *)
+      bind_var id typ'';
+      annot_copy tldf (Def (((typ'', id), expr_res), deftype))
+  | Fundef (ret_type, id, params, body) ->
+      let funtype =
+        ([], Funtype (List.map (fun (typ, _) -> typ) params, ret_type), [])
+      in
       bind_var id funtype;
       bind_type (type_descriptor_of_perktype funtype) funtype;
-      annot_copy tldf (Fundef (ret_type, id, params, body_res))
+      annot_copy tldf (Fundef (ret_type, id, params, body))
+      (* |> ignore; typecheck_deferred_function tldf *)
   | Extern (id, typ) ->
       (match lookup_var id with
       | Some _ ->
@@ -226,27 +253,49 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
       let c_res = typecheck_command ~retype c in
       pop_symbol_table ();
       annot_copy cmd (Block c_res)
-  | DefCmd ((typ, id), expr) ->
+  | DefCmd (((typ, id), expr), _) ->
       let typ' = resolve_type typ in
       let expr_res, expr_type = typecheck_expr expr in
       let typ'' =
-        try match_types typ' expr_type
+        try match_types ~coalesce:true typ' expr_type
         with Type_match_error msg -> raise_type_error cmd msg
       in
-      bind_type_if_needed typ'';
+      let typ''_nocoal =
+        try match_types ~coalesce:false typ' expr_type
+        with Type_match_error _ -> ([], Infer, [])
+      in
+      let deftype =
+        if equal_perktype typ'' typ''_nocoal then None else Some typ''
+      in
+      (* Check if the type is a user-defined type *)
       bind_var id typ'';
-      annot_copy cmd (DefCmd ((typ'', id), expr_res))
-  | Assign (lhs, rhs, _) ->
+      (* Printf.printf "DefCmd: %s, deftype: %s\n" id
+        (match deftype with
+        | Some deftype -> show_perktype deftype
+        | None -> "None"); *)
+      annot_copy cmd (DefCmd (((typ'', id), expr_res), deftype))
+  | Assign (lhs, rhs, _, _) ->
       let lhs_res, lhs_type = typecheck_expr lhs in
       let rhs_res, rhs_type = typecheck_expr rhs in
-      let _ =
-        try match_types lhs_type rhs_type
+      let exprval =
+        try match_types ~coalesce:true lhs_type rhs_type
         with Type_match_error msg -> raise_type_error cmd msg
+      in
+      let exprval_nocoal =
+        try match_types ~coalesce:false lhs_type rhs_type
+        with Type_match_error _ -> ([], Infer, [])
       in
       let acctype =
         match ( $ ) lhs_res with Access (_, _, t) -> t | _ -> None
       in
-      annot_copy cmd (Assign (lhs_res, rhs_res, acctype))
+      let rasstype =
+        if equal_perktype exprval exprval_nocoal then None else Some exprval
+      in
+      (* Printf.printf "Assign: %s = %s, acctype: %s, rasstype: %s\n"
+        (show_perktype lhs_type) (show_perktype rhs_type)
+        (match acctype with Some t -> show_perktype t | None -> "None")
+        (match rasstype with Some t -> show_perktype t | None -> "None"); *)
+      annot_copy cmd (Assign (lhs_res, rhs_res, acctype, rasstype))
   | Seq (c1, c2) ->
       let c1_res = typecheck_command ~retype c1 in
       let c2_res = typecheck_command ~retype c2 in
@@ -291,9 +340,8 @@ and typecheck_expr (expr : expr_a) : expr_a * perktype =
         | _ -> raise_type_error func "Function type expected"
       in
       let param_rets = List.map typecheck_expr params in
-      let param_types = match_type_list fun_param_types param_rets in
-      ( annot_copy expr (Apply (fun_expr, List.map fst param_rets)),
-        ([], Funtype (param_types, fun_ret_type), []) )
+      let _param_types = match_type_list fun_param_types param_rets in
+      (annot_copy expr (Apply (fun_expr, List.map fst param_rets)), fun_ret_type)
   | Binop (op, lhs, rhs) ->
       let lhs_res, lhs_type = typecheck_expr lhs in
       let rhs_res, rhs_type = typecheck_expr rhs in
@@ -457,75 +505,85 @@ and typecheck_expr (expr : expr_a) : expr_a * perktype =
 
 (* Add more type checking logic as needed: pepperepeppe     peppè! culo*)
 
-and match_types (expected : perktype) (actual : perktype) : perktype =
-  let (_, expected', _), (_, actual', _) = (expected, actual) in
-  match (expected', actual') with
-  | Basetype t1, Basetype t2 when t1 = t2 -> actual
-  | Pointertype t1, Pointertype t2 when t1 = t2 -> actual
-  | Funtype (params1, ret1), Funtype (params2, ret2)
-    when List.length params1 = List.length params2 ->
-      let param_types = List.map2 match_types params1 params2 in
-      let ret_type = match_types ret1 ret2 in
-      ([], Funtype (param_types, ret_type), [])
-  | Arraytype (t1, n1), Arraytype (t2, n2) when n1 = n2 ->
-      let t = match_types t1 t2 in
-      ([], Arraytype (t, n1), [])
-  | Structtype t1, Structtype t2 when t1 = t2 -> actual
-  | ArcheType (name1, decls1), ArcheType (name2, decls2)
-    when name1 = name2 && List.length decls1 = List.length decls2 ->
-      let decls_types =
-        List.map2
-          (fun (t1, id1) (t2, id2) ->
-            if id1 = id2 then (match_types t1 t2, id1)
-            else
-              raise
-                (Type_match_error
-                   (Printf.sprintf
-                      "Archetype %s has different field names: %s and %s" name1
-                      id1 id2)))
-          decls1 decls2
-      in
-      ([], ArcheType (name1, decls_types), [])
-  | ( Modeltype (name1, archetypes1, decls1, constr_params1),
-      Modeltype (name2, archetypes2, decls2, constr_params2) )
-    when name1 = name2
-         && List.length archetypes1 = List.length archetypes2
-         && List.length decls1 = List.length decls2
-         && List.length constr_params1 = List.length constr_params2 ->
-      let decls_types =
-        List.map2
-          (fun (t1, id1) (t2, id2) ->
-            if id1 = id2 then (match_types t1 t2, id1)
-            else
-              raise
-                (Type_match_error
-                   (Printf.sprintf
-                      "Model %s has different field names: %s and %s" name1 id1
-                      id2)))
-          decls1 decls2
-      in
-      let constr_types = List.map2 match_types constr_params1 constr_params2 in
-      ([], Modeltype (name1, archetypes1, decls_types, constr_types), [])
-  | Vararg, Vararg -> actual
-  | Infer, _ -> actual
-  | Optiontype t, Optiontype s -> ([], Optiontype (match_types t s), [])
-  (* | Optiontype t, _ -> ([], Optiontype (match_types t actual), []) *)
-  | Tupletype t1, Tupletype t2 ->
-      ([], Tupletype (List.map2 match_types t1 t2), [])
-  | ArchetypeSum t1, ArchetypeSum t2 ->
-      ( [],
-        ArchetypeSum
-          (match_type_list t1
-             (List.map (fun t -> (annotate_dummy (Int (-1)), t)) t2)),
-        [] )
-  | _ ->
-      raise
-        (Type_match_error
-           (Printf.sprintf "Type mismatch: expected %s, got %s instead"
-              (* (Codegen.codegen_type ~expand:true expected)
+and match_types ?(coalesce : bool = false) (expected : perktype)
+    (actual : perktype) : perktype =
+  let rec match_types_aux expected actual =
+    let (_, expected', _), (_, actual', _) = (expected, actual) in
+    match (expected', actual') with
+    | Basetype t1, Basetype t2 when t1 = t2 -> actual
+    | Pointertype t1, Pointertype t2 when t1 = t2 -> actual
+    | Funtype (params1, ret1), Funtype (params2, ret2)
+      when List.length params1 = List.length params2 ->
+        let param_types = List.map2 match_types_aux params1 params2 in
+        let ret_type = match_types_aux ret1 ret2 in
+        ([], Funtype (param_types, ret_type), [])
+    | Arraytype (t1, n1), Arraytype (t2, n2) when n1 = n2 ->
+        let t = match_types_aux t1 t2 in
+        ([], Arraytype (t, n1), [])
+    | Structtype t1, Structtype t2 when t1 = t2 -> actual
+    | ArcheType (name1, decls1), ArcheType (name2, decls2)
+      when name1 = name2 && List.length decls1 = List.length decls2 ->
+        let decls_types =
+          List.map2
+            (fun (t1, id1) (t2, id2) ->
+              if id1 = id2 then (match_types_aux t1 t2, id1)
+              else
+                raise
+                  (Type_match_error
+                     (Printf.sprintf
+                        "Archetype %s has different field names: %s and %s"
+                        name1 id1 id2)))
+            decls1 decls2
+        in
+        ([], ArcheType (name1, decls_types), [])
+    | ( Modeltype (name1, archetypes1, decls1, constr_params1),
+        Modeltype (name2, archetypes2, decls2, constr_params2) )
+      when name1 = name2
+           && List.length archetypes1 = List.length archetypes2
+           && List.length decls1 = List.length decls2
+           && List.length constr_params1 = List.length constr_params2 ->
+        let decls_types =
+          List.map2
+            (fun (t1, id1) (t2, id2) ->
+              if id1 = id2 then (match_types_aux t1 t2, id1)
+              else
+                raise
+                  (Type_match_error
+                     (Printf.sprintf
+                        "Model %s has different field names: %s and %s" name1
+                        id1 id2)))
+            decls1 decls2
+        in
+        let constr_types =
+          List.map2 match_types_aux constr_params1 constr_params2
+        in
+        ([], Modeltype (name1, archetypes1, decls_types, constr_types), [])
+    | Vararg, Vararg -> actual
+    | Infer, _ -> actual
+    | Optiontype t, Optiontype s -> ([], Optiontype (match_types_aux t s), [])
+    | Tupletype t1, Tupletype t2 ->
+        ([], Tupletype (List.map2 match_types_aux t1 t2), [])
+    | ArchetypeSum t1, ArchetypeSum t2 ->
+        ( [],
+          ArchetypeSum
+            (match_type_list t1
+               (List.map (fun t -> (annotate_dummy (Int (-1)), t)) t2)),
+          [] )
+    | _ ->
+        raise
+          (Type_match_error
+             (Printf.sprintf "Type mismatch: expected %s, got %s instead"
+                (* (Codegen.codegen_type ~expand:true expected)
               (Codegen.codegen_type ~expand:true actual))) *)
-              (show_perktype expected)
-              (show_perktype actual)))
+                (show_perktype expected)
+                (show_perktype actual)))
+  in
+  match (coalesce, expected, actual) with
+  | _, (_, Optiontype t, _), (_, Optiontype s, _) ->
+      ([], Optiontype (match_types_aux t s), [])
+  | true, (_, Optiontype t, _), _ ->
+      ([], Optiontype (match_types_aux t actual), [])
+  | _, _, _ -> match_types_aux expected actual
 
 and match_type_list (expected : perktype list)
     (actual : (expr_a * perktype) list) : perktype list =

@@ -85,6 +85,28 @@ let rec get_tuple (t : perktype) : string =
     Printf.printf "get_tuple: not found in tuple_hashmap\n";
     get_tuple t
 
+and get_option_type (t : perktype) : string =
+  match t with
+  | _, Optiontype u, _ -> (
+      try
+        let key = type_descriptor_of_perktype t in
+        let _t, _code, _deps = Hashtbl.find type_symbol_table key in
+        let compiled =
+          Printf.sprintf "typedef struct %s {int is_some; %s contents;} %s;" key
+            (codegen_type u) key
+        in
+        Hashtbl.replace type_symbol_table key (_t, Some compiled, _deps);
+        key
+      with Not_found ->
+        bind_type_if_needed t;
+        (* Printf.printf "get_option_type: %s not found\n" (show_perktype t); *)
+        (* print_type_symbol_table (); *)
+        get_option_type t)
+  | _ ->
+      failwith
+        (Printf.sprintf "get_option_type: not an option type, got %s"
+           (type_descriptor_of_perktype t))
+
 and get_archetype_sum_struct (t : perktype) : string =
   try
     let key = type_descriptor_of_perktype t in
@@ -116,7 +138,7 @@ and get_archetype_sum_struct (t : perktype) : string =
              (type_descriptor_of_perktype t))
   with Not_found ->
     bind_type_if_needed t;
-    Printf.printf "get_archetype_sum_struct: not found\n";
+    (* Printf.printf "get_archetype_sum_struct: not found\n"; *)
     get_archetype_sum_struct t
 
 and get_function_type (t : perktype) : string * string * string =
@@ -404,7 +426,7 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
   | Fundef (t, id, args, body) -> indent_string ^ codegen_fundef t id args body
   | Extern _ -> ""
   (* Externs are only useful for type checking. No need to keep it for codegen step *)
-  | Def (t, e) -> indent_string ^ codegen_def t e
+  | Def ((t, e), deftype) -> indent_string ^ codegen_def t e deftype
   | Import lib ->
       add_import lib;
       ""
@@ -417,17 +439,20 @@ and codegen_command (cmd : command_a) (indentation : int) : string =
       indent_string ^ "{\n"
       ^ codegen_command c (indentation + 1)
       ^ "\n" ^ indent_string ^ "}"
-  | DefCmd (t, e) -> indent_string ^ codegen_def t e
-  | Assign (l, r, ass_type) ->
+  | DefCmd ((t, e), deftype) -> indent_string ^ codegen_def t e deftype
+  | Assign (l, r, lass_type, _rass_type) ->
       (* Printf.printf "Assignment type: %s\n"
-        (match ass_type with Some t -> show_perktype t | None -> "None"); *)
+        (match lass_type with Some t -> show_perktype t | None -> "None"); *)
       indent_string
-      ^ Printf.sprintf "%s = %s;"
-          (match ass_type with
-          | Some (_, ArchetypeSum _, _) | Some (_, ArcheType _, _) ->
-              "*(" ^ codegen_expr l ^ ")"
-          | _ -> codegen_expr l)
-          (codegen_expr r)
+      ^ (Printf.sprintf "%s = %s;"
+           (match lass_type with
+           | Some (_, ArchetypeSum _, _) | Some (_, ArcheType _, _) ->
+               Printf.sprintf "*(%s)" (codegen_expr l)
+           | _ -> Printf.sprintf "%s" (codegen_expr l)))
+          (match _rass_type with
+          | Some (_, Optiontype _, _) ->
+              Printf.sprintf "{1, %s}" (codegen_expr r)
+          | _ -> codegen_expr r)
   | Seq (c1, c2) ->
       let c1_code = codegen_command c1 indentation in
       let c2_code = codegen_command c2 indentation in
@@ -490,10 +515,14 @@ and codegen_command (cmd : command_a) (indentation : int) : string =
         indent_string name
   | Return e -> indent_string ^ Printf.sprintf "return %s;" (codegen_expr e)
 
-and codegen_def (t : perkvardesc) (e : expr_a) : string =
+and codegen_def (t : perkvardesc) (e : expr_a) (deftype : perktype option) :
+    string =
   let decl_str = codegen_decl t in
   let expr_str = codegen_expr e in
-  Printf.sprintf "%s = %s;" decl_str expr_str
+  match deftype with
+  | Some (_, Optiontype _, _) ->
+      Printf.sprintf "%s = {1, %s};" decl_str expr_str
+  | _ -> Printf.sprintf "%s = %s;" decl_str expr_str
 
 and codegen_decl (t : perkvardesc) : string =
   let t, id = t in
@@ -536,8 +565,9 @@ and codegen_type ?(expand : bool = false) (t : perktype) : string =
         let _ = get_archetype_sum_struct t in
         type_descriptor_of_perktype t
     | Infer -> failwith "Impossible: type has not been inferred"
-    | Optiontype t ->
-        Printf.sprintf "struct {int is_some; %s contents}" (codegen_type t)
+    | Optiontype _t ->
+        let _ = get_option_type t in
+        type_descriptor_of_perktype t
     | Tupletype _ts ->
         let _ = get_tuple t in
         type_descriptor_of_perktype t

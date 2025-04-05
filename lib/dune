@@ -2,7 +2,7 @@
  (name Perkelang)
  (libraries sedlex menhirLib)
  (preprocess
-  (pps ppx_deriving.show sedlex.ppx)))
+  (pps ppx_deriving.show ppx_deriving.eq sedlex.ppx)))
 
 (menhir
  (modules parser)
