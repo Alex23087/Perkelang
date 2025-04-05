@@ -117,7 +117,7 @@ and expr_t =
   | Subscript of expr_a * expr_a
   | TupleSubscript of expr_a * int
   | Summon of perkident * expr_a list
-  | Access of expr_a * perkident
+  | Access of expr_a * perkident * perktype option
   | Tuple of expr_a list * perktype option
   | As of perkident * perktype list
 [@@deriving show]
@@ -127,7 +127,7 @@ and command_t =
   | InlineCCmd of string
   | DefCmd of perkdef
   | Block of command_a
-  | Assign of (expr_a * expr_a)
+  | Assign of (expr_a * expr_a * perktype option)
   | Seq of command_a * command_a
   | IfThenElse of expr_a * command_a * command_a
   | Whiledo of expr_a * command_a

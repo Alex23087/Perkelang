@@ -358,6 +358,7 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
           \    %s%s obj = malloc(sizeof(struct %s));\n\
           \    %s%s self = obj;\n\
            %s\n\
+           %s\n\
            %s    %sreturn obj;\n\
            }"
           indent_string name name params_str_with_types indent_string name name
@@ -372,6 +373,26 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
                       Printf.sprintf "obj->%s = (%s) %s" id (codegen_type typ)
                         (codegen_expr expr))
                     defs)
+             ^ ";")
+          (if List.length archetype_decls == 0 then ""
+           else
+             String.concat ";\n"
+               (List.map
+                  (fun (a, id, t) ->
+                    Printf.sprintf "%s    obj->%s.%s = (%sobj->%s" indent_string
+                      a id
+                      (match t with
+                      | _, Funtype _, _ -> codegen_type t ^ ") "
+                      | _ -> codegen_type t ^ "*) &")
+                      id)
+                  (List.flatten
+                     (List.map
+                        (let f =
+                          fun (i, h) ->
+                           Hashtbl.fold (fun k v acc -> (i, k, v) :: acc) h []
+                         in
+                         f)
+                        archetypes)))
              ^ ";")
           (match constructor with
           | None -> ""
@@ -397,9 +418,16 @@ and codegen_command (cmd : command_a) (indentation : int) : string =
       ^ codegen_command c (indentation + 1)
       ^ "\n" ^ indent_string ^ "}"
   | DefCmd (t, e) -> indent_string ^ codegen_def t e
-  | Assign (l, r) ->
+  | Assign (l, r, ass_type) ->
+      (* Printf.printf "Assignment type: %s\n"
+        (match ass_type with Some t -> show_perktype t | None -> "None"); *)
       indent_string
-      ^ Printf.sprintf "%s = %s;" (codegen_expr l) (codegen_expr r)
+      ^ Printf.sprintf "%s = %s;"
+          (match ass_type with
+          | Some (_, ArchetypeSum _, _) | Some (_, ArcheType _, _) ->
+              "*(" ^ codegen_expr l ^ ")"
+          | _ -> codegen_expr l)
+          (codegen_expr r)
   | Seq (c1, c2) ->
       let c1_code = codegen_command c1 indentation in
       let c2_code = codegen_command c2 indentation in
@@ -478,7 +506,8 @@ and codegen_fundef (t : perktype) (id : perkident) (args : perkvardesc list)
   let args_str =
     String.concat ", "
       (List.map
-         (fun (t, id) -> Printf.sprintf "%s %s" (codegen_type t) id)
+         (fun (t, id) ->
+           Printf.sprintf "%s %s" (codegen_type (resolve_type t)) id)
          args)
   in
   let body_str = codegen_command body 1 in
@@ -542,12 +571,20 @@ and codegen_expr (e : expr_a) : string =
       let expr_str = codegen_expr e in
       let args_str = String.concat ", " (List.map codegen_expr args) in
       match ( $ ) e with
-      | Access (e1, _) ->
+      | Access (e1, _, acctype) -> (
           let e1_str = codegen_expr e1 in
           let args_str = if List.length args = 0 then "" else ", " ^ args_str in
-          Printf.sprintf "%s(%s%s)" expr_str e1_str args_str
+          match acctype with
+          | Some _t -> Printf.sprintf "%s(%s.self%s)" expr_str e1_str args_str
+          | None -> Printf.sprintf "%s(%s%s)" expr_str e1_str args_str)
       | _ -> Printf.sprintf "%s(%s)" expr_str args_str)
-  | Access (e1, ide) -> Printf.sprintf "%s->%s" (codegen_expr e1) ide
+  | Access (e1, ide, acctype) -> (
+      match acctype with
+      | None -> Printf.sprintf "%s->%s" (codegen_expr e1) ide
+      | Some t ->
+          Printf.sprintf "%s.%s.%s" (codegen_expr e1)
+            (type_descriptor_of_perktype t)
+            ide)
   | Binop (op, e1, e2) ->
       Printf.sprintf "%s %s %s" (codegen_expr e1) (codegen_binop op)
         (codegen_expr e2)

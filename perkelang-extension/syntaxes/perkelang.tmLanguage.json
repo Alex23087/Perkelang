@@ -95,7 +95,7 @@
       "patterns": [
         {
           "name": "keyword.control.perkelang",
-          "match": "\\b(let|import|extern|archetype|model|fun|for|while|do|if|else|return|summon)\\b"
+          "match": "\\b(let|import|extern|archetype|model|fun|for|while|do|if|else|return|summon|banish)\\b"
         },
         {
           "name": "keyword.other.begin-c.perkelang",
@@ -111,7 +111,7 @@
       "patterns": [
         {
           "name": "storage.type.perkelang",
-          "match": "\\b(int|void|uint8_t|float|double)\\b"
+          "match": "\\b(int|void|uint8_t|uint16_t|uint32_t|uint64_t|float|double|bool)\\b"
         }
       ]
     },

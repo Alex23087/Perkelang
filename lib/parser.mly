@@ -66,6 +66,7 @@
 
 program:
   | defs = separated_list(Semicolon, topleveldef) option(Semicolon) EOF { defs }
+  | separated_list(Semicolon, topleveldef) error { raise (ParseError("unexpected token after program (Perhaps you forgot a ; ?)")) }
 
 topleveldef:
   | Import i = String                                                                                      { annotate_2_code $loc (Ast.Import ("<" ^ i ^ ">")) }
@@ -81,7 +82,7 @@ topleveldef:
 command:
   | ic = InlineC                                                                                           { annotate_2_code $loc (Ast.InlineCCmd(ic)) }
   | d = perkdef                                                                                            { annotate_2_code $loc (Ast.DefCmd d) }
-  | l = expr Assign r = expr                                                                               { annotate_2_code $loc (Ast.Assign (l, r)) }
+  | l = expr Assign r = expr                                                                               { annotate_2_code $loc (Ast.Assign (l, r, None)) }
   | If LParen e = expr RParen LBrace c1 = command RBrace Else LBrace c2 = command RBrace                   { annotate_2_code $loc (Ast.IfThenElse (e, c1, c2)) }
   | If LParen e = expr RParen LBrace c1 = command RBrace                                                   { annotate_2_code $loc (Ast.IfThenElse (e, c1, annotate_dummy Ast.Skip)) }
   | While LParen e = expr RParen LBrace c = command RBrace                                                 { annotate_2_code $loc (Ast.Whiledo (e, c)) }
@@ -139,7 +140,7 @@ expr:
   | e1 = expr LBracket e2 = expr RBracket                                                                  { annotate_2_code $loc (Ast.Subscript (e1, e2)) }
   | Summon i = Ident LParen l = expr_list RParen                                                           { annotate_2_code $loc (Summon (i, l)) }
   | Summon i = Ident LParen RParen                                                                         { annotate_2_code $loc (Summon (i, [])) }
-  | e1 = expr Dot i = Ident                                                                                { annotate_2_code $loc (Ast.Access (e1, i)) }
+  | e1 = expr Dot i = Ident                                                                                { annotate_2_code $loc (Ast.Access (e1, i, None)) }
   // | Nothing                                                                                                { annotate_2_code $loc (Ast.Nothing Ast.Infer) }
   // | Something e = expr                                                                                     { annotate_2_code $loc (Ast.Something (e, Ast.Infer)) }
   | LParen RParen                                                                                          { annotate_2_code $loc (Ast.Tuple ([], None)) }
@@ -183,6 +184,7 @@ perktype_partial:
   | LParen RParen                                                                                          { Ast.Tupletype [] }
   | t = perktype Star                                                                                      { Ast.Pointertype t }
   | t = perktype Question                                                                                  { Ast.Optiontype t }
+  | Lt tys = separated_nonempty_list(Plus, Ident) Gt                                                       { Ast.ArchetypeSum (tys |> List.map (fun x -> ([], Ast.Basetype x, []))) }
   | error                                                                                                  { raise (ParseError("type expected")) }
 
 %inline binop:
