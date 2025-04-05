@@ -14,7 +14,7 @@
 %token <string> String
 %token <string> Ident
 %token Comma Semicolon Colon LParen RParen LBrace RBrace LBracket RBracket Bang
-%token Arrow Bigarrow
+%token Arrow Bigarrow As
 %token Skip Return Let
 %token Public Private Static Extern
 %token Const Volatile Restrict
@@ -30,7 +30,7 @@
 %nonassoc Eq
 %left Arrow             /* For Bigarrow in lambda expressions */
 %left Plus Minus
-%left Star Div
+%left Star Div As
 %right PlusPlus MinusMinus Bang Ampersand
                           /* The above line is intended for prefix operators.
                              (You would use %prec with these tokens in your grammar
@@ -144,6 +144,7 @@ expr:
   // | Something e = expr                                                                                     { annotate_2_code $loc (Ast.Something (e, Ast.Infer)) }
   | LParen RParen                                                                                          { annotate_2_code $loc (Ast.Tuple ([], None)) }
   | LParen e = expr_list RParen                                                                            { annotate_2_code $loc (Ast.Tuple (e, None)) }
+  | id = Ident As tl = separated_nonempty_list (Plus, perktype)                                            { annotate_2_code $loc (Ast.As (id, tl)) }
 
   | error                                                                                                  { raise (ParseError("expression expected")) }
   | expr error                                                                                             { raise (ParseError("unexpected expression")) }

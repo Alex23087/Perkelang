@@ -53,6 +53,7 @@ type perktype_partial =
   | Modeltype of perkident * perkident list * perkdecl list * perktype list
   | Optiontype of perktype
   | Tupletype of perktype list
+  | ArchetypeSum of perktype list
   | Vararg
   | Infer
 [@@deriving show]
@@ -118,6 +119,7 @@ and expr_t =
   | Summon of perkident * expr_a list
   | Access of expr_a * perkident
   | Tuple of expr_a list * perktype option
+  | As of perkident * perktype list
 [@@deriving show]
 
 (* Syntax of the language *)

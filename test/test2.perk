@@ -23,7 +23,7 @@ model Bnanana: Superbanana {
     let terza_cosa: float = .9,
 
     let add: int -> int = (x: int): int => {x + 5},
-    let constructor: (int * int) -> void = (super_palle: int, altracosa: int): void => {
+    let constructor: (int , int) -> void = (super_palle: int, altracosa: int): void => {
         self.super_palle = super_palle;
         self.altracosa = altracosa;
     },

@@ -26,6 +26,7 @@ let rec resolve_type (typ : perktype) : perktype =
     | ArcheType (name, decls) ->
         let decls' = List.map (fun (t, id) -> (resolve_type t, id)) decls in
         ArcheType (name, decls')
+    | ArchetypeSum ts -> ArchetypeSum (List.map resolve_type ts)
     | Modeltype (name, archetypes, decls, constr_params) ->
         let decls' = List.map (fun (t, id) -> (resolve_type t, id)) decls in
         Modeltype (name, archetypes, decls', constr_params)
@@ -51,6 +52,8 @@ let rec type_descriptor_of_perktype (t : perktype) : string =
       "vararg"
       (* This is probably problematic, cannot define function pointers with ... . Nvm, apparently you can 😕*)
   | ArcheType (name, _decls) -> name
+  | ArchetypeSum archs ->
+      "Sum" ^ String.concat "Plus" (List.map type_descriptor_of_perktype archs)
   | Modeltype (name, _archs, _decls, _constr_params) -> name
   | Optiontype t -> Printf.sprintf "%s_opt" (type_descriptor_of_perktype t)
   | Infer -> failwith "Impossible: type has not been inferred"
@@ -88,6 +91,8 @@ and dependencies_of_type (typ : perktype) : perkident list =
         name
         :: List.flatten
              (List.map (fun (t, _) -> dependencies_of_type_aux t) decls)
+    | ArchetypeSum ts ->
+        List.flatten (List.map (fun t -> dependencies_of_type_aux t) ts)
     | Modeltype (name, archetypes, decls, constr_params) ->
         let decls =
           List.map
@@ -133,6 +138,9 @@ let rec bind_type_if_needed (typ : perktype) =
   | _, ArcheType (name, decls), _ ->
       bind_type name typ';
       List.iter (fun (typ, _id) -> bind_type_if_needed typ) decls
+  | _, ArchetypeSum _ts, _ ->
+      bind_type (type_descriptor_of_perktype typ') typ';
+      List.iter bind_type_if_needed _ts
   | _, Modeltype (name, _archetypes, decls, constr_params), _ ->
       bind_type name typ';
       List.iter (fun (typ, _id) -> bind_type_if_needed typ) decls;

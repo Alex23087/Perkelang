@@ -103,6 +103,7 @@ let rec token lexbuf =
   | "model" | "impl" | "class" -> Model
   | "summon" -> Summon
   | "banish" -> Banish
+  | "~>" | "as" -> As
   | "->" -> Arrow
   | "=>" -> Bigarrow
   | identifier -> Ident (Sedlexing.Latin1.lexeme lexbuf)

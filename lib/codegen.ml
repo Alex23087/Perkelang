@@ -85,6 +85,40 @@ let rec get_tuple (t : perktype) : string =
     Printf.printf "get_tuple: not found in tuple_hashmap\n";
     get_tuple t
 
+and get_archetype_sum_struct (t : perktype) : string =
+  try
+    let key = type_descriptor_of_perktype t in
+    let _t, _code, _deps = Hashtbl.find type_symbol_table key in
+    match t with
+    | _, ArchetypeSum archs, _ ->
+        let compiled =
+          Printf.sprintf "struct %s {%svoid* self;};\ntypedef struct %s %s;"
+            (type_descriptor_of_perktype t)
+            (if List.length archs = 0 then ""
+             else
+               String.concat "; "
+                 (List.map
+                    (fun t ->
+                      Printf.sprintf "%s %s"
+                        (type_descriptor_of_perktype t)
+                        (type_descriptor_of_perktype t))
+                    archs)
+               ^ "; ")
+            (type_descriptor_of_perktype t)
+            (type_descriptor_of_perktype t)
+        in
+        Hashtbl.replace type_symbol_table key (_t, Some compiled, _deps);
+        compiled
+    | _ ->
+        failwith
+          (Printf.sprintf
+             "get_archetype_sum_struct: not an archetype sum, got %s"
+             (type_descriptor_of_perktype t))
+  with Not_found ->
+    bind_type_if_needed t;
+    Printf.printf "get_archetype_sum_struct: not found\n";
+    get_archetype_sum_struct t
+
 and get_function_type (t : perktype) : string * string * string =
   try
     let key = type_descriptor_of_perktype t in
@@ -202,7 +236,8 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
         l;
       add_struct_def
         ([], ArcheType (i, l), [])
-        (Printf.sprintf "\n%sstruct %s {\n%s\n};\n" indent_string i
+        (Printf.sprintf "\n%sstruct %s {\n%s\n};\ntypedef struct %s %s;"
+           indent_string i
            (if List.length l = 0 then ""
             else
               (indent_string ^ "    "
@@ -225,7 +260,8 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
                        in
                        codegen_decl (typ, id))
                      l))
-              ^ ";"));
+              ^ ";")
+           i i);
       ""
   | Model (name, il, defs) ->
       let mems = List.map (fun ((typ, id), _) -> (typ, id)) defs in
@@ -467,6 +503,9 @@ and codegen_type ?(expand : bool = false) (t : perktype) : string =
     | Vararg -> "..."
     | Modeltype (name, _archs, _decls, _constr_params) -> name
     | ArcheType (name, _decls) -> name
+    | ArchetypeSum _archs ->
+        let _ = get_archetype_sum_struct t in
+        type_descriptor_of_perktype t
     | Infer -> failwith "Impossible: type has not been inferred"
     | Optiontype t ->
         Printf.sprintf "struct {int is_some; %s contents}" (codegen_type t)
@@ -530,6 +569,19 @@ and codegen_expr (e : expr_a) : string =
         (String.concat ", "
            (List.map (fun e -> Printf.sprintf "%s" (codegen_expr e)) es))
   | TupleSubscript (e, i) -> Printf.sprintf "%s._%d" (codegen_expr e) i
+  | As (id, typlist) ->
+      (* let _ = get_tuple  *)
+      let sum_type_descr = codegen_type ([], ArchetypeSum typlist, []) in
+      Printf.sprintf "((%s) {%s%s})" sum_type_descr
+        (if List.length typlist = 0 then ""
+         else
+           String.concat ", "
+             (List.map
+                (fun t ->
+                  Printf.sprintf "%s->%s" id (codegen_type t ~expand:true))
+                typlist)
+           ^ ", ")
+        id
 (* | Nothing t -> Printf.sprintf "{0, 0}" TODO: Continue here *)
 
 (* struct {int is_empty; int value;} palle = {0,1}; *)

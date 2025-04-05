@@ -14,6 +14,12 @@ archetype UIElement {
     draw : () -> void
 };
 
+// struct EqPlusMonad {
+//     struct Eq;
+//     struct Monad;
+//     void* self;
+// }
+
 model Button: UIElement {
     let constructor := (posx: float, posy: float): void => {
         self.posx = posx;
@@ -30,12 +36,19 @@ model Button: UIElement {
     },
     
     let draw := () : void => {
-        printf("drawn button at (%f, %f)\n", self.posx, self.pos[1])
+        printf("drawn button at (%f, %f)\n", self.posx, self.pos[1]);
     }
+
+    // button->Eq->functia()
+
+    // let x = (EqPlusMonad){button->Eq, button->Monad, button->self}
+    // x->Eq->functia()
+
 };
 
 fun main(): int {
     let but := summon Button(10., 0.);
+    but ~> UIElement;
     but.draw();
     banish but
 }
