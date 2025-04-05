@@ -512,6 +512,12 @@ and match_types (expected : perktype) (actual : perktype) : perktype =
   (* | Optiontype t, _ -> ([], Optiontype (match_types t actual), []) *)
   | Tupletype t1, Tupletype t2 ->
       ([], Tupletype (List.map2 match_types t1 t2), [])
+  | ArchetypeSum t1, ArchetypeSum t2 ->
+      ( [],
+        ArchetypeSum
+          (match_type_list t1
+             (List.map (fun t -> (annotate_dummy (Int (-1)), t)) t2)),
+        [] )
   | _ ->
       raise
         (Type_match_error

@@ -38,15 +38,19 @@ model Button: UIElement {
 
 };
 
+fun move(b: <UIElement>, x: float, y: float): void {
+    b.posx = x;
+    b.posy = y;
+};
+
 fun main(): int {
     let but := summon Button(10., 0.);
     let b := (but ~> UIElement);
     b.draw();
     but.draw();
+    move(b, 20., 30.);
+    but.pos = (but.posx, but.posy);
+    b.draw();
+    but.draw();
     banish but
-};
-
-fun move(b: <UIElement>, x: float, y: float): void {
-    b.posx = x;
-    b.posy = y;
 }
