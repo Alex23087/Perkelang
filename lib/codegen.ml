@@ -208,6 +208,7 @@ and put_symbol (ident : perkident) (typ : perktype) : unit =
   with Not_found -> Hashtbl.add symbol_table ident typ
 
 and codegen_program (tldfs : topleveldef_a list) : string =
+  say_here "codegen_program";
   let body =
     String.concat "\n"
       (List.map
@@ -247,6 +248,7 @@ and codegen_program (tldfs : topleveldef_a list) : string =
   ^ body
 
 and codegen_topleveldef (tldf : topleveldef_a) : string =
+  say_here (Printf.sprintf "codegen_topleveldef: %s" (show_topleveldef_a tldf));
   let indent_string = "" in
   (*TODO: Remove*)
   match ( $ ) tldf with
@@ -715,11 +717,12 @@ and generate_types () =
   in
   ft_list := List.sort sortfun !ft_list;
   while List.length !ft_list > 0 do
-    (* Printf.printf "%s\n\n"
+    Printf.printf "%s\n\n"
       (Printf.sprintf "%s: %s"
          (List.hd (List.map fst !ft_list))
          (List.hd
-            (List.map (fun (_, (_, _, d)) -> String.concat ", " d) !ft_list))); *)
+            (List.map (fun (_, (_, _, d)) -> String.concat ", " d) !ft_list)));
+    (* say_here "generate_types"; *)
     let _id, (_typ, _code, _deps) = List.hd !ft_list in
     ft_list := List.tl !ft_list;
     (* Remove dzpendency from other elements *)

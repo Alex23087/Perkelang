@@ -154,3 +154,7 @@ and topleveldef_t =
 and expr_a = expr_t annotated [@@deriving show, eq]
 and command_a = command_t annotated [@@deriving show, eq]
 and topleveldef_a = topleveldef_t annotated [@@deriving show, eq]
+
+let say_here (msg : string) : unit =
+  Printf.printf "%s\n" msg;
+  flush stdout

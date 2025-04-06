@@ -9,9 +9,13 @@ archetype UIElement {
     posx : float,
     posy : float,
 
-    //opt: float?,
+    opt: float?,
 
     draw : () -> void
+}
+
+archetype Eq {
+    eq : (int) -> int
 }
 
 model Button: UIElement {
@@ -19,9 +23,15 @@ model Button: UIElement {
         self.posx = posx;
         self.posy = posy;
     },
+
+    let eq := (other: int): int => {
+        let otherButton := 0;
+        return true;
+    },
     
     let posx : float = 0.,
     let posy : float = 0.,
+    let opt: float? = some 0.0,
 
     let pos: (float * float) = (self.posx, self.posy),
 

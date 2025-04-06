@@ -5,8 +5,6 @@ import * as path from 'path';
 import { execSync } from 'child_process';
 
 export function activate(context: vscode.ExtensionContext) {
-    vscode.window.showInformationMessage('Perkelang extension is now active!'); // Notify user on activation
-
     const diagnosticCollection = vscode.languages.createDiagnosticCollection('Perkelang');
 
     vscode.workspace.onDidSaveTextDocument((document) => {

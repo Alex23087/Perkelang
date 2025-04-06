@@ -186,6 +186,7 @@ perktype_partial:
   | t = perktype Question                                                                                  { Ast.Optiontype t }
   | Lt tys = separated_nonempty_list(Plus, Ident) Gt                                                       { Ast.ArchetypeSum (tys |> List.map (fun x -> ([], Ast.Basetype x, []))) }
   | error                                                                                                  { raise (ParseError("type expected")) }
+  | Lt error                                                                                               { raise (ParseError("Cannot have empty type sum")) }
 
 %inline binop:
   | Plus                                                                                                   { Ast.Add }

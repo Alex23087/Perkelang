@@ -1,6 +1,7 @@
 function compile() {
     # make clean
     clear
+    pkill perkc
     make run
 }
 
