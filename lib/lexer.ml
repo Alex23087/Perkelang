@@ -58,12 +58,15 @@ let rec token lexbuf =
       InlineC (Buffer.contents string_buffer)
   | "+" -> Plus
   | "==" -> Eq
+  | "!=" | "≠" -> Neq
   | "<" -> Lt
-  | "<=" -> Leq
+  | "<=" | "≤" -> Leq
   | ">" -> Gt
-  | ">=" -> Geq
+  | ">=" | "≥" -> Geq
   | "-" -> Minus
-  | "!" -> Bang
+  | "!" | "¬" -> Bang
+  | "and" | "∧" | "&&" -> Land
+  | "or" | "∨" | "||" -> Lor
   | "fun" -> Fun
   | "=" -> Assign
   | "++" -> PlusPlus
@@ -95,17 +98,17 @@ let rec token lexbuf =
   | "restrict" -> Restrict
   | "import" -> Import
   | "open" -> Open
-  | "true" -> Integer 1
-  | "false" -> Integer 0
+  (* | "true" -> Integer 1
+  | "false" -> Integer 0 *)
   | "archetype" | "theory" | "interface" | "prototype" | "trait" | "typeclass"
     ->
       Archetype (* TODO reinvent the wheel*)
   | "model" | "impl" | "class" -> Model
   | "summon" -> Summon
   | "banish" -> Banish
-  | "~>" | "as" -> As
-  | "->" -> Arrow
-  | "=>" -> Bigarrow
+  | "~>" | "as" | "⤳" | "⇝" -> As
+  | "->" | "→" -> Arrow
+  | "=>" | "⇒" -> Bigarrow
   | identifier -> Ident (Sedlexing.Latin1.lexeme lexbuf)
   | "0x", hex_number -> Integer (int_of_string (Sedlexing.Latin1.lexeme lexbuf))
   | "0b", Plus ('0' | '1') ->

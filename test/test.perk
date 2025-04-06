@@ -5,6 +5,9 @@ import "stdint.h"
 
 extern printf : (char*, ...) -> int
 
+let true  := 1
+let false := 0
+
 archetype UIElement {
     posx : float,
     posy : float,
@@ -18,7 +21,7 @@ archetype Eq {
     eq : (int) -> int
 }
 
-model Button: UIElement {
+model Button: UIElement, Eq {
     let constructor := (posx: float, posy: float): void => {
         self.posx = posx;
         self.posy = posy;
@@ -47,22 +50,35 @@ model Button: UIElement {
     // x->Eq->functia()
 
 }
-    
+
 fun main(): int {
-    let but := summon Button(10., 0.);
+    let but :Button= summon Button(10., 0.);
     let test : float? = some 10.;
     // let test1 : [Button]? = nothing;
     // let test2 : Button? = nothing;
     let bmaybe : float? = nothing;
-    let b := (but ~> UIElement);
+    let b :<UIElement>= (but ~> UIElement);
     b.draw();
     but.draw();
     move(b, 20., 30.);
     but.pos = but.where_am_i();
     b.draw();
     but.draw();
+    let b4 := true;
+    let b2 : int = true;
+    let b3 : int = 0 == 0;
+
+    let testarray : [int 10] = [];
+    for (let i := 0; i < 10; i++) {
+        testarray[i] = i;
+    };
+
+    for (let i: int = 0; i < 10; i++) {
+        printf("testarray[%d] = %d\n", i, testarray[i]);
+    };
+
     banish but;
-}
+} 
 
 fun move(b: <UIElement>, x: float, y: float): void {
     b.posx = x;

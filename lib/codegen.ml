@@ -108,6 +108,27 @@ and get_option_type (t : perktype) : string =
         (Printf.sprintf "get_option_type: not an option type, got %s"
            (type_descriptor_of_perktype t))
 
+and generate_array_type (at : perktype) (n : int option) : string =
+  let key = type_descriptor_of_perktype ([], Arraytype (at, n), []) in
+  try
+    let _t, _code, _deps = Hashtbl.find type_symbol_table key in
+    let compiled =
+      match n with
+      | Some n ->
+          Printf.sprintf "typedef %s %s[%d];"
+            (type_descriptor_of_perktype at)
+            key n
+      | None ->
+          Printf.sprintf "typedef %s %s[];" (type_descriptor_of_perktype at) key
+    in
+    Hashtbl.replace type_symbol_table key (_t, Some compiled, _deps);
+    key
+  with Not_found ->
+    bind_type_if_needed ([], Arraytype (at, n), []);
+    (* Printf.printf "generate_array_type: %s not found\n" (show_perktype at); *)
+    (* print_type_symbol_table (); *)
+    generate_array_type at n
+
 and get_archetype_sum_struct (t : perktype) : string =
   try
     let key = type_descriptor_of_perktype t in
@@ -181,21 +202,23 @@ and get_lambda (e : expr_a) : string * string =
     let id = fresh_var "lambda" in
     let compiled =
       match ( $ ) e with
-      | Lambda (retype, args, body) ->
-          let type_str = codegen_type retype in
-          let args_str =
-            String.concat ", "
-              (List.map
-                 (fun (t, id) -> Printf.sprintf "%s %s" (codegen_type t) id)
-                 args)
-          in
-          let body_str = codegen_command body 1 in
-          let funtype =
-            ([ Static ], Funtype (List.map (fun (t, _) -> t) args, retype), [])
-          in
-          put_symbol id funtype;
-          Printf.sprintf "static %s %s(%s) {\n%s\n}" type_str id args_str
-            body_str
+      | Lambda (retype, args, body) -> (
+          try
+            let type_str = codegen_type retype in
+            let args_str =
+              String.concat ", "
+                (List.map
+                   (fun (t, id) -> Printf.sprintf "%s %s" (codegen_type t) id)
+                   args)
+            in
+            let body_str = codegen_command body 1 in
+            let funtype =
+              ([ Static ], Funtype (List.map (fun (t, _) -> t) args, retype), [])
+            in
+            put_symbol id funtype;
+            Printf.sprintf "static %s %s(%s) {\n%s\n}" type_str id args_str
+              body_str
+          with Not_inferred s -> raise_type_error e s)
       | _ -> failwith "get_lambda: not a lambda expression"
     in
     Hashtbl.add lambdas_hashmap e (id, compiled);
@@ -239,200 +262,218 @@ and codegen_program (tldfs : topleveldef_a list) : string =
   ^ Hashtbl.fold
       (fun id typ acc -> Printf.sprintf "%s%s;\n" acc (codegen_fundecl id typ))
       symbol_table ""
+  (* Write program code *)
+  ^ "\n"
+  ^ body ^ "\n"
   (* Write lambdas *)
   ^ Hashtbl.fold
       (fun _ v acc -> Printf.sprintf "%s\n%s\n" acc (snd v))
       lambdas_hashmap ""
-  (* Write program code *)
-  ^ "\n"
-  ^ body
 
 and codegen_topleveldef (tldf : topleveldef_a) : string =
-  say_here (Printf.sprintf "codegen_topleveldef: %s" (show_topleveldef_a tldf));
-  let indent_string = "" in
-  (*TODO: Remove*)
-  match ( $ ) tldf with
-  | Archetype (i, l) ->
-      let _ = add_archetype i in
-      List.iter
-        (fun t ->
-          let typ, id = t in
-          add_binding_to_archetype i id typ)
-        l;
-      add_struct_def
-        ([], ArcheType (i, l), [])
-        (Printf.sprintf "\n%sstruct %s {\n%s\n};\ntypedef struct %s %s;"
-           indent_string i
-           (if List.length l = 0 then ""
-            else
-              (indent_string ^ "    "
-              ^ String.concat
-                  (";\n" ^ indent_string ^ "    ")
-                  (List.map
-                     (fun ((a, typ, d), id) ->
-                       let typ =
-                         match typ with
-                         | Funtype (params, ret) ->
-                             ( a,
-                               Funtype
-                                 ( ( [],
-                                     Pointertype ([], Basetype "void", []),
-                                     [] )
-                                   :: params,
-                                   ret ),
-                               d )
-                         | _ -> ([], Pointertype (a, typ, d), [])
-                       in
-                       codegen_decl (typ, id))
-                     l))
-              ^ ";")
-           i i);
-      ""
-  | Model (name, il, defs) ->
-      let mems = List.map (fun ((typ, id), _) -> (typ, id)) defs in
-      let archetypes = List.map (fun n -> (n, get_archetype n)) il in
-      let archetype_decls =
-        List.map
-          (fun (n, h) -> Hashtbl.fold (fun k v acc -> (v, k, n) :: acc) h [])
-          archetypes
-      in
-      let archetype_decls = List.flatten archetype_decls in
-      let missing_decl_name = ref ("", "") in
-      let (*theorem: *) has_all_the_right_things =
-        List.for_all
-          (fun (typ, id, arch) ->
-            if List.mem (typ, id) mems then true
-            else (
-              missing_decl_name := (arch, id);
-              false))
-          archetype_decls
-      in
-      if not has_all_the_right_things then
-        raise
-          (Type_error
-             ( (( @@ ) tldf).start_pos,
-               (( @@ ) tldf).end_pos,
-               Printf.sprintf
-                 "Model %s does not properly implement Archetype %s: missing \
-                  declaration for %s"
-                 name (fst !missing_decl_name) (snd !missing_decl_name) ))
-      else
-        let constructor =
-          List.find_opt (fun ((_, id), _) -> id = "constructor") defs
-        in
-        let defs =
-          List.map
-            (fun ((typ, id), expr) ->
-              let selftype = ([], Pointertype ([], Structtype name, []), []) in
-              match (typ, ( $ ) expr) with
-              | ( (attrs, Funtype (params, ret), specs),
-                  Lambda (lret, lparams, lexpr) ) ->
-                  let (typ, id), expr =
-                    ( ((attrs, Funtype (selftype :: params, ret), specs), id),
-                      annotate_dummy
-                        (Lambda (lret, (selftype, "self") :: lparams, lexpr)) )
-                  in
-                  ignore (get_function_type typ);
-                  ((typ, id), expr)
-              | _ -> ((typ, id), expr))
-            defs
-        in
-        let mems = List.map (fun ((typ, id), _) -> (typ, id)) defs in
-        let params_str_with_types, params_str, params_typ =
-          match constructor with
-          | None -> ("", "", [])
-          | Some ((typ, _), _) -> (
-              match typ with
-              | _, Funtype (params, _), _ ->
-                  ( String.concat ", "
-                      (List.mapi
-                         (fun (i : int) (t : perktype) ->
-                           Printf.sprintf "%s arg_%d" (codegen_type t) i)
-                         params),
-                    String.concat ", "
-                      (List.mapi (fun i _ -> Printf.sprintf "arg_%d" i) params),
-                    params )
-              | _ -> raise (TypeError "Constructor is not a function type"))
-        in
+  try
+    say_here
+      (Printf.sprintf "codegen_topleveldef: %s" (show_topleveldef_a tldf));
+    let indent_string = "" in
+    (*TODO: Remove*)
+    match ( $ ) tldf with
+    | Archetype (i, l) ->
+        let _ = add_archetype i in
+        List.iter
+          (fun t ->
+            let typ, id = t in
+            add_binding_to_archetype i id typ)
+          l;
         add_struct_def
-          ([], Modeltype (name, il, List.map fst defs, params_typ), [])
-          (Printf.sprintf
-             "\n%sstruct %s {\n%s%s\n};\n%stypedef struct %s* %s;\n"
-             indent_string name
-             (if List.length mems = 0 then ""
+          ([], ArcheType (i, l), [])
+          (Printf.sprintf "\n%sstruct %s {\n%s\n};\ntypedef struct %s %s;"
+             indent_string i
+             (if List.length l = 0 then ""
               else
                 (indent_string ^ "    "
                 ^ String.concat
                     (";\n" ^ indent_string ^ "    ")
-                    (List.map codegen_decl mems))
-                ^ ";")
-             (if List.length il = 0 then ""
-              else
-                "\n\n"
-                ^ String.concat "\n"
                     (List.map
-                       (fun s ->
-                         Printf.sprintf "%sstruct %s %s;"
-                           (indent_string ^ "    ") s s)
-                       il))
-             indent_string name name);
-        let params_str = if params_str = "" then "" else ", " ^ params_str in
-        (* TODO: Add error locations *)
-        Printf.sprintf
-          "%s%s %s_init(%s) {\n\
-          \    %s%s obj = malloc(sizeof(struct %s));\n\
-          \    %s%s self = obj;\n\
-           %s\n\
-           %s\n\
-           %s    %sreturn obj;\n\
-           }"
-          indent_string name name params_str_with_types indent_string name name
-          indent_string name
-          (if List.length mems = 0 then ""
-           else
-             indent_string ^ "    "
-             ^ String.concat
-                 (";\n" ^ indent_string ^ "    ")
-                 (List.map
-                    (fun ((typ, id), expr) ->
-                      Printf.sprintf "obj->%s = (%s) %s" id (codegen_type typ)
-                        (codegen_expr expr))
-                    defs)
-             ^ ";")
-          (if List.length archetype_decls == 0 then ""
-           else
-             String.concat ";\n"
-               (List.map
-                  (fun (a, id, t) ->
-                    Printf.sprintf "%s    obj->%s.%s = (%sobj->%s" indent_string
-                      a id
-                      (match t with
-                      | _, Funtype _, _ -> codegen_type t ^ ") "
-                      | _ -> codegen_type t ^ "*) &")
-                      id)
-                  (List.flatten
-                     (List.map
-                        (let f =
-                          fun (i, h) ->
-                           Hashtbl.fold (fun k v acc -> (i, k, v) :: acc) h []
+                       (fun ((a, typ, d), id) ->
+                         let typ =
+                           match typ with
+                           | Funtype (params, ret) ->
+                               ( a,
+                                 Funtype
+                                   ( ( [],
+                                       Pointertype ([], Basetype "void", []),
+                                       [] )
+                                     :: params,
+                                     ret ),
+                                 d )
+                           | _ -> ([], Pointertype (a, typ, d), [])
                          in
-                         f)
-                        archetypes)))
-             ^ ";")
-          (match constructor with
-          | None -> ""
-          | Some _ ->
-              Printf.sprintf "%s    obj->constructor(obj%s);\n" indent_string
-                params_str)
-          indent_string
-  | InlineC s -> s
-  | Fundef (t, id, args, body) -> indent_string ^ codegen_fundef t id args body
-  | Extern _ -> ""
-  (* Externs are only useful for type checking. No need to keep it for codegen step *)
-  | Def ((t, e), deftype) -> indent_string ^ codegen_def t e deftype
-  | Import lib ->
-      add_import lib;
-      ""
+                         codegen_decl (typ, id))
+                       l))
+                ^ ";")
+             i i);
+        ""
+    | Model (name, il, defs) ->
+        let mems = List.map (fun ((typ, id), _) -> (typ, id)) defs in
+        let archetypes = List.map (fun n -> (n, get_archetype n)) il in
+        let archetype_decls =
+          List.map
+            (fun (n, h) -> Hashtbl.fold (fun k v acc -> (v, k, n) :: acc) h [])
+            archetypes
+        in
+        let archetype_decls = List.flatten archetype_decls in
+        let missing_decl_name = ref ("", "") in
+        let (*theorem: *) has_all_the_right_things =
+          List.for_all
+            (fun (typ, id, arch) ->
+              if List.mem (typ, id) mems then true
+              else (
+                missing_decl_name := (arch, id);
+                false))
+            archetype_decls
+        in
+        if not has_all_the_right_things then
+          raise
+            (Type_error
+               ( (( @@ ) tldf).start_pos,
+                 (( @@ ) tldf).end_pos,
+                 Printf.sprintf
+                   "Model %s does not properly implement Archetype %s: missing \
+                    declaration for %s"
+                   name (fst !missing_decl_name) (snd !missing_decl_name) ))
+        else
+          let constructor =
+            List.find_opt (fun ((_, id), _) -> id = "constructor") defs
+          in
+          let defs =
+            List.map
+              (fun ((typ, id), expr) ->
+                let selftype =
+                  ([], Pointertype ([], Structtype name, []), [])
+                in
+                match (typ, ( $ ) expr) with
+                | ( (attrs, Funtype (params, ret), specs),
+                    Lambda (lret, lparams, lexpr) ) ->
+                    let (typ, id), expr =
+                      ( ((attrs, Funtype (selftype :: params, ret), specs), id),
+                        annot_copy expr
+                          (Lambda (lret, (selftype, "self") :: lparams, lexpr))
+                      )
+                    in
+                    ignore (get_function_type typ);
+                    ((typ, id), expr)
+                | _ -> ((typ, id), expr))
+              defs
+          in
+          let mems = List.map (fun ((typ, id), _) -> (typ, id)) defs in
+          let params_str_with_types, params_str, params_typ =
+            match constructor with
+            | None -> ("", "", [])
+            | Some ((typ, _), _) -> (
+                match typ with
+                | _, Funtype (params, _), _ ->
+                    ( String.concat ", "
+                        (List.mapi
+                           (fun (i : int) (t : perktype) ->
+                             Printf.sprintf "%s arg_%d" (codegen_type t) i)
+                           params),
+                      String.concat ", "
+                        (List.mapi
+                           (fun i _ -> Printf.sprintf "arg_%d" i)
+                           params),
+                      params )
+                | _ -> raise (TypeError "Constructor is not a function type"))
+          in
+          add_struct_def
+            ([], Modeltype (name, il, List.map fst defs, params_typ), [])
+            (Printf.sprintf
+               "\n%sstruct %s {\n%s%s\n};\n%stypedef struct %s* %s;\n"
+               indent_string name
+               (if List.length mems = 0 then ""
+                else
+                  (indent_string ^ "    "
+                  ^ String.concat
+                      (";\n" ^ indent_string ^ "    ")
+                      (List.map codegen_decl mems))
+                  ^ ";")
+               (if List.length il = 0 then ""
+                else
+                  "\n\n"
+                  ^ String.concat "\n"
+                      (List.map
+                         (fun s ->
+                           Printf.sprintf "%sstruct %s %s;"
+                             (indent_string ^ "    ") s s)
+                         il))
+               indent_string name name);
+          let params_str = if params_str = "" then "" else ", " ^ params_str in
+          (* TODO: Add error locations *)
+          Printf.sprintf
+            "%s%s %s_init(%s) {\n\
+            \    %s%s self = malloc(sizeof(struct %s));\n\
+             %s\n\
+             %s\n\
+             %s    %sreturn self;\n\
+             }"
+            indent_string name name params_str_with_types indent_string name
+            name
+            (if List.length mems = 0 then ""
+             else
+               indent_string ^ "    "
+               ^ String.concat
+                   (";\n" ^ indent_string ^ "    ")
+                   (List.map
+                      (fun ((typ, id), expr) ->
+                        Printf.sprintf "self->%s = (%s) %s" id
+                          (codegen_type typ) (codegen_expr expr))
+                      defs)
+               ^ ";")
+            (if List.length archetype_decls == 0 then ""
+             else
+               String.concat ";\n"
+                 (List.map
+                    (fun (a, id, t) ->
+                      Printf.sprintf "%s    self->%s.%s = (%sself->%s"
+                        indent_string a id
+                        (match t with
+                        | a, Funtype (params, retype), q ->
+                            codegen_type
+                              ( a,
+                                Funtype
+                                  ( ( [],
+                                      Pointertype ([], Basetype "void", []),
+                                      [] )
+                                    :: params,
+                                    retype ),
+                                q )
+                            ^ ") "
+                        | _ -> codegen_type t ^ "*) &")
+                        id)
+                    (List.flatten
+                       (List.map
+                          (let f =
+                            fun (i, h) ->
+                             Hashtbl.fold (fun k v acc -> (i, k, v) :: acc) h []
+                           in
+                           f)
+                          archetypes)))
+               ^ ";")
+            (match constructor with
+            | None -> ""
+            | Some _ ->
+                Printf.sprintf "%s    self->constructor(self%s);\n"
+                  indent_string params_str)
+            indent_string
+    | InlineC s -> s
+    | Fundef (t, id, args, body) ->
+        indent_string ^ codegen_fundef t id args body
+    | Extern _ -> ""
+    (* Externs are only useful for type checking. No need to keep it for codegen step *)
+    | Def ((t, e), deftype) -> indent_string ^ codegen_def t e deftype
+    | Import lib ->
+        add_import lib;
+        ""
+  with Not_inferred s -> raise_type_error tldf s
 
 and codegen_command (cmd : command_a) (indentation : int) : string =
   let indent_string = String.make (4 * indentation) ' ' in
@@ -453,8 +494,8 @@ and codegen_command (cmd : command_a) (indentation : int) : string =
                Printf.sprintf "*(%s)" (codegen_expr l)
            | _ -> Printf.sprintf "%s" (codegen_expr l)))
           (match _rass_type with
-          | Some (_, Optiontype _, _) ->
-              Printf.sprintf "{1, %s}" (codegen_expr r)
+          | Some (_, Optiontype t, _) ->
+              Printf.sprintf "((%s){1, %s})" (codegen_type t) (codegen_expr r)
           | _ -> codegen_expr r)
   | Seq (c1, c2) ->
       let c1_code = codegen_command c1 indentation in
@@ -547,6 +588,8 @@ and codegen_fundef (t : perktype) (id : perkident) (args : perkvardesc list)
   put_symbol id funtype;
   Printf.sprintf "%s %s(%s) {\n%s\n}" type_str id args_str body_str
 
+(* transforms a perktype into a C type *)
+(* TODO figure out details...... *)
 and codegen_type ?(expand : bool = false) (t : perktype) : string =
   (* Printf.printf "codegen_type: %s\n" (show_perktype t); flush stdout; *)
   let attrs, t', quals = t in
@@ -559,21 +602,23 @@ and codegen_type ?(expand : bool = false) (t : perktype) : string =
     | Funtype _ -> t |> get_function_type |> if expand then thrd_3 else fst_3
     | Pointertype ([], Structtype _, _) when expand -> "void*"
     | Pointertype t -> Printf.sprintf "%s*" (codegen_type t ~expand)
-    | Arraytype (t, Some n) ->
-        Printf.sprintf "%s[%d]" (codegen_type t ~expand) n
-    | Arraytype (t, None) -> Printf.sprintf "%s[]" (codegen_type t ~expand)
+    | Arraytype (at, n) ->
+        generate_array_type at n
+        (* Printf.sprintf "%s[%d]" (codegen_type t ~expand) n *)
     | Vararg -> "..."
     | Modeltype (name, _archs, _decls, _constr_params) -> name
     | ArcheType (name, _decls) -> name
     | ArchetypeSum _archs ->
         let _ = get_archetype_sum_struct t in
         type_descriptor_of_perktype t
-    | Infer -> failwith "Impossible: type has not been inferred"
+    | Infer -> raise (Not_inferred "Impossible: type has not been inferred")
     | Optiontype _t ->
         let _ = get_option_type t in
+        let _ = codegen_type ~expand _t in
         type_descriptor_of_perktype t
     | Tupletype _ts ->
         let _ = get_tuple t in
+        let _ = List.map (codegen_type ~expand) _ts in
         type_descriptor_of_perktype t
   in
   if attrs_str = "" && quals_str = "" then type_str
@@ -591,8 +636,8 @@ and codegen_qual (qual : perktype_qualifier) : string =
   | Restrict -> "restrict"
 
 and codegen_expr (e : expr_a) : string =
-  let e = ( $ ) e in
-  match e with
+  let e' = ( $ ) e in
+  match e' with
   | Int i -> string_of_int i
   | Float f -> string_of_float f
   | Char c -> Printf.sprintf "'%c'" c
@@ -627,7 +672,7 @@ and codegen_expr (e : expr_a) : string =
   | PostUnop (op, e) ->
       Printf.sprintf "%s%s" (codegen_expr e) (codegen_postunop op)
   | Parenthesised e -> Printf.sprintf "(%s)" (codegen_expr e)
-  | Lambda _ -> e |> annotate_dummy |> get_lambda |> fst
+  | Lambda _ -> e |> get_lambda |> fst
   | Subscript (e1, e2) ->
       Printf.sprintf "%s[%s]" (codegen_expr e1) (codegen_expr e2)
   | Summon (typident, args) ->
@@ -666,9 +711,14 @@ and codegen_expr (e : expr_a) : string =
           Printf.sprintf "((%s) {1, %s})"
             (get_option_type ([], Optiontype t, []))
             (codegen_expr e))
+  | Array es ->
+      Printf.sprintf "{%s}"
+        (String.concat ", "
+           (List.map (fun e -> Printf.sprintf "%s" (codegen_expr e)) es))
 
 (* struct {int is_empty; int value;} palle = {0,1}; *)
 
+(* generates code for binary operators *)
 and codegen_binop (op : binop) : string =
   match op with
   | Add -> "+"
@@ -680,7 +730,11 @@ and codegen_binop (op : binop) : string =
   | Leq -> "<="
   | Gt -> ">"
   | Geq -> ">="
+  | Land -> "&&"
+  | Lor -> "||"
+  | Neq -> "!="
 
+(* generates code for prefix unary operators *)
 and codegen_preunop (op : preunop) : string =
   match op with
   | Neg -> "-"
@@ -690,9 +744,11 @@ and codegen_preunop (op : preunop) : string =
   | PreIncrement -> "++"
   | PreDecrement -> "--"
 
+(* generates code for postfix unary operators *)
 and codegen_postunop (op : postunop) : string =
   match op with PostIncrement -> "++" | PostDecrement -> "--"
 
+(* generates code for function declarations *)
 and codegen_fundecl (id : perkident) (typ : perktype) : string =
   let attrs, t, _ = typ in
   let attrs_str = String.concat " " (List.map codegen_attr attrs) in
@@ -717,13 +773,18 @@ and generate_types () =
   in
   ft_list := List.sort sortfun !ft_list;
   while List.length !ft_list > 0 do
-    Printf.printf "%s\n\n"
+    (* Printf.printf "%s\n\n"
       (Printf.sprintf "%s: %s"
          (List.hd (List.map fst !ft_list))
          (List.hd
-            (List.map (fun (_, (_, _, d)) -> String.concat ", " d) !ft_list)));
+            (List.map (fun (_, (_, _, d)) -> String.concat ", " d) !ft_list))); *)
     (* say_here "generate_types"; *)
     let _id, (_typ, _code, _deps) = List.hd !ft_list in
+    (match _typ with
+    | [], Tupletype _, [] ->
+        let _ = get_tuple _typ in
+        ()
+    | _ -> ());
     ft_list := List.tl !ft_list;
     (* Remove dzpendency from other elements *)
     ft_list :=

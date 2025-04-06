@@ -76,6 +76,9 @@ type binop =
   | Leq
   | Gt
   | Geq
+  | Neq
+  | Land
+  | Lor
 (*  ... boolean and bitwise ops and all that  *)
 [@@deriving show, eq]
 
@@ -118,6 +121,7 @@ and expr_t =
   | Access of expr_a * perkident * perktype option
   | Tuple of expr_a list * perktype option
   | As of perkident * perktype list
+  | Array of expr_a list
 [@@deriving show, eq]
 
 (* Syntax of the language *)
@@ -155,6 +159,7 @@ and expr_a = expr_t annotated [@@deriving show, eq]
 and command_a = command_t annotated [@@deriving show, eq]
 and topleveldef_a = topleveldef_t annotated [@@deriving show, eq]
 
-let say_here (msg : string) : unit =
-  Printf.printf "%s\n" msg;
-  flush stdout
+let say_here (_msg : string) : unit =
+  (* Printf.printf "%s\n" msg;
+  flush stdout *)
+  ()

@@ -6,7 +6,7 @@
 
 /* Tokens declarations */
 %token EOF
-%token Plus Eq Lt Leq Gt Geq Minus Star Div Ampersand PlusPlus MinusMinus Dot Ellipsis Question
+%token Plus Eq Neq Lt Leq Gt Geq Minus Star Div Ampersand PlusPlus MinusMinus Dot Ellipsis Question Land Lor
 %token Fun Assign If Else While Do For
 %token <int> Integer
 %token <float> Float
@@ -110,6 +110,7 @@ command:
 
 perkdef:
   | Let vd = perkvardesc Assign e = expr                                                                   { (vd, e) }
+  | Let perkvardesc error                                                                                  { raise (ParseError("expression expected: value must be initialized")) }
   | error { raise (ParseError("definition expected (e.g. let banana : int = 5)")) }
 
 perkfun:
@@ -146,11 +147,15 @@ expr:
   | LParen RParen                                                                                          { annotate_2_code $loc (Ast.Tuple ([], None)) }
   | LParen e = expr_list RParen                                                                            { annotate_2_code $loc (Ast.Tuple (e, None)) }
   | id = Ident As tl = separated_nonempty_list (Plus, perktype)                                            { annotate_2_code $loc (Ast.As (id, tl)) }
+  | LBracket RBracket                                                                                      { annotate_2_code $loc (Ast.Array [])}
+  | LBracket l = separated_nonempty_list (Comma, expr) RBracket                                            { annotate_2_code $loc (Ast.Array l)}
 
   | error                                                                                                  { raise (ParseError("expression expected")) }
   | expr error                                                                                             { raise (ParseError("unexpected expression")) }
   | Ident error                                                                                            { raise (ParseError("unexpected expression. Perhaps you tried to use C-style types?")) }
   | Summon Ident error                                                                                     { raise (ParseError("error while summoning")) }
+  | LParen perkvardesc_list RParen Colon perktype error                                                    { raise (ParseError("invalid lambda definition (Perhaps you are missing a => )")) }
+  | LParen RParen Colon perktype error                                                                     { raise (ParseError("invalid lambda definition (Perhaps you are missing a => )")) }
 
 %inline perktype_attribute:
   | Public                                                                                                 { Ast.Public }
@@ -198,6 +203,9 @@ perktype_partial:
   | Leq                                                                                                    { Ast.Leq }
   | Gt                                                                                                     { Ast.Gt }
   | Geq                                                                                                    { Ast.Geq }
+  | Neq                                                                                                    { Ast.Neq }
+  | Land                                                                                                   { Ast.Land }
+  | Lor                                                                                                    { Ast.Lor }
 
 %inline preunop:
   | Minus                                                                                                  { Ast.Neg }
