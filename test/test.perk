@@ -21,6 +21,41 @@ archetype Eq {
     eq : (int) -> int
 }
 
+model List {
+    let car : int = 0,
+    let cdr : List? = nothing,
+
+    let constructor := (car: int) : void => {
+        self.car = car;
+    },
+
+    let push_head := (x: int) : List => {
+        let newList := summon List(x);
+        newList.cdr = self;
+        return newList;
+    },
+
+    let push_tail := (x: int) : void => {
+        let newList := summon List(x);
+
+        let current := self;
+        while (current.cdr?) {
+            current = current.cdr!;
+        };
+        current.cdr = newList;
+    },
+
+    let print_all := () : void => {
+        let current := self;
+        while (current.cdr?) {
+            printf("%d ", current.car);
+            current = current.cdr!;
+        };
+        printf("%d ", current.car);
+        printf("\n");
+    }
+}
+
 model Button: UIElement, Eq {
     let constructor := (posx: float, posy: float): void => {
         self.posx = posx;
@@ -57,7 +92,7 @@ fun main(): int {
     // let test1 : [Button]? = nothing;
     // let test2 : Button? = nothing;
     let bmaybe : float? = nothing;
-    let b :<UIElement>= (but ~> UIElement);
+    let b :<UIElement> = (but ~> UIElement);
     b.draw();
     but.draw();
     move(b, 20., 30.);
@@ -69,13 +104,32 @@ fun main(): int {
     let b3 : int = 0 == 0;
 
     let testarray : [int 10] = [];
-    for (let i := 0; i < 10; i++) {
-        testarray[i] = i;
+    // for (let i := 0; i < 10; i++) {
+    //     testarray[i] = i;
+    // };
+
+    // for (let i: int = 0; i < 10; i++) {
+    //     printf("testarray[%d] = %d\n", i, testarray[i]);
+    // };
+
+    if ( true) {
+        let x : int = 20;
     };
 
-    for (let i: int = 0; i < 10; i++) {
-        printf("testarray[%d] = %d\n", i, testarray[i]);
+    let x : int? = nothing;
+
+    if (x?) {
+        printf("x is some %d\n", x!);
+    } else {
+        printf("x is nothing\n");
     };
+
+    let list : List = summon List(0);
+    list.push_tail(1);
+    list.push_tail(2);
+    list.push_tail(3);
+
+    list.print_all();
 
     banish but;
 } 

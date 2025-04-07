@@ -59,10 +59,10 @@ let rec token lexbuf =
   | "+" -> Plus
   | "==" -> Eq
   | "!=" | "≠" -> Neq
-  | "<" -> Lt
   | "<=" | "≤" -> Leq
-  | ">" -> Gt
+  | "<" -> Lt
   | ">=" | "≥" -> Geq
+  | ">" -> Gt
   | "-" -> Minus
   | "!" | "¬" -> Bang
   | "and" | "∧" | "&&" -> Land

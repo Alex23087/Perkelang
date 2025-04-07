@@ -223,6 +223,12 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
       pop_symbol_table ();
       (* Check that all the fields defined in the model are well-typed *)
       push_symbol_table ();
+      (* !!!!!WARNING!!!!! THIS CANNOT BE DONE LIKE THAT. MUST BE CHECKED AS FOR PROGRAM FOR HOISTED FUNCTIONS !!!!!WARNING!!!!! *)
+      (* TODO: For some reason, you can write things like member[0] instead of self.member[0]. Investigate *)
+      bind_type_if_needed
+        ( [],
+          Modeltype (ident, archetypes, List.map fst fields, constr_params),
+          [] );
       bind_var "self"
         ( [],
           Modeltype (ident, archetypes, List.map fst fields, constr_params),
@@ -231,6 +237,7 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
         List.map
           (fun ((typ, id), expr) ->
             let expr_res, expr_type = typecheck_expr expr in
+            let expr_res, expr_type = fill_nothing expr_res expr_type typ in
             let typ' =
               try match_types typ expr_type
               with Type_match_error msg -> raise_type_error expr msg
@@ -241,10 +248,12 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
       in
       pop_symbol_table ();
       (* Add model to the symbol table *)
-      bind_type_if_needed
+      let modeltype =
         ( [],
           Modeltype (ident, archetypes, List.map fst fields_res, constr_params),
-          [] );
+          [] )
+      in
+      rebind_type (type_descriptor_of_perktype modeltype) modeltype;
       annot_copy tldf (Model (ident, archetypes, fields_res))
 
 and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
@@ -312,14 +321,78 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
       let c1_res = typecheck_command ~retype c1 in
       let c2_res = typecheck_command ~retype c2 in
       annot_copy cmd (Seq (c1_res, c2_res))
-  | IfThenElse _ -> cmd
-  | Whiledo _ -> cmd
-  | Dowhile _ -> cmd
-  | For _ -> cmd
+  | IfThenElse (guard, then_branch, else_branch) ->
+      let guard_res, guard_type = typecheck_expr guard in
+      (match guard_type with
+      | _, Basetype "int", _ -> () (* TODO: Decide what TODO with booleans *)
+      | _ ->
+          raise_type_error cmd
+            (Printf.sprintf
+               "If guard must be a boolean (or an integer, we are still a bit \
+                confused ok?!?), got %s"
+               (show_perktype guard_type)));
+      push_symbol_table ();
+      let then_branch_res = typecheck_command ~retype then_branch in
+      pop_symbol_table ();
+      push_symbol_table ();
+      let else_branch_res = typecheck_command ~retype else_branch in
+      pop_symbol_table ();
+      annot_copy cmd (IfThenElse (guard_res, then_branch_res, else_branch_res))
+  | Whiledo (guard, body) ->
+      let guard_res, guard_type = typecheck_expr guard in
+      (match guard_type with
+      | _, Basetype "int", _ -> () (* TODO: Decide what TODO with booleans *)
+      | _ ->
+          raise_type_error cmd
+            (Printf.sprintf
+               "If guard must be a boolean (or an integer, we are still a bit \
+                confused ok?!?), got %s"
+               (show_perktype guard_type)));
+      push_symbol_table ();
+      let body_res = typecheck_command ~retype body in
+      pop_symbol_table ();
+      annot_copy cmd (Whiledo (guard_res, body_res))
+  | Dowhile (guard, body) ->
+      let guard_res, guard_type = typecheck_expr guard in
+      (match guard_type with
+      | _, Basetype "int", _ -> () (* TODO: Decide what TODO with booleans *)
+      | _ ->
+          raise_type_error cmd
+            (Printf.sprintf
+               "While guard must be a boolean (or an integer, we are still a \
+                bit confused ok?!?), got %s"
+               (show_perktype guard_type)));
+      push_symbol_table ();
+      let body_res = typecheck_command ~retype body in
+      pop_symbol_table ();
+      annot_copy cmd (Dowhile (guard_res, body_res))
+  | For (initcmd, guard, incrcmd, body) ->
+      let initcmd_res = typecheck_command ~retype initcmd in
+      let guard_res, guard_type = typecheck_expr guard in
+      (match guard_type with
+      | _, Basetype "int", _ -> () (* TODO: Decide what TODO with booleans *)
+      | _ ->
+          raise_type_error cmd
+            (Printf.sprintf
+               "For guard must be a boolean (or an integer, we are still a bit \
+                confused ok?!?), got %s"
+               (show_perktype guard_type)));
+      let incrcmd_res = typecheck_command ~retype incrcmd in
+      push_symbol_table ();
+      let body_res = typecheck_command ~retype body in
+      pop_symbol_table ();
+      annot_copy cmd (For (initcmd_res, guard_res, incrcmd_res, body_res))
   | Expr e -> annot_copy cmd (Expr (fst (typecheck_expr e)))
   | Switch _ -> cmd
   | Skip -> cmd
-  | Banish _ -> cmd
+  | Banish id ->
+      (match Option.map resolve_type (lookup_var id) with
+      | None -> raise_syntax_error cmd ("Identifier " ^ id ^ " not found")
+      | Some (_, Modeltype _, _) -> ()
+      | Some _ ->
+          raise_syntax_error cmd
+            (Printf.sprintf "Variable %s is not a model" id));
+      cmd
   | Return e ->
       let e_res, e_type = typecheck_expr e in
       (match retype with
@@ -352,7 +425,10 @@ and typecheck_expr (expr : expr_a) : expr_a * perktype =
         | _ -> raise_type_error func "Function type expected"
       in
       let param_rets = List.map typecheck_expr params in
-      let _param_types = match_type_list fun_param_types param_rets in
+      let _param_types =
+        try match_type_list fun_param_types param_rets
+        with Type_match_error msg -> raise_type_error expr msg
+      in
       let param_rets =
         List.map2
           (fun (e, t1) t2 -> fill_nothing e t1 t2)
@@ -369,7 +445,19 @@ and typecheck_expr (expr : expr_a) : expr_a * perktype =
       let lhs_res, _lhs_type = fill_nothing lhs_res lhs_type res_type in
       let rhs_res, _rhs_type = fill_nothing rhs_res rhs_type res_type in
       (annot_copy expr (Binop (op, lhs_res, rhs_res)), res_type)
-  | PreUnop _ -> failwith "preu"
+  | PreUnop (op, e) ->
+      let expr_res, expr_type = typecheck_expr e in
+      let res_type =
+        match (op, resolve_type expr_type) with
+        | Dereference, (_, Pointertype t, _) -> t
+        | Reference, t -> ([], Pointertype t, [])
+        | Dereference, _ ->
+            raise_type_error expr
+              (Printf.sprintf "Cannot dereference non-pointer type %s"
+                 (show_perktype expr_type))
+        | _, t -> t
+      in
+      (annot_copy expr (PreUnop (op, expr_res)), res_type)
   | Lambda (retype, params, body) ->
       push_symbol_table ();
       List.iter
@@ -384,7 +472,21 @@ and typecheck_expr (expr : expr_a) : expr_a * perktype =
       pop_symbol_table ();
       bind_type_if_needed lamtype;
       (annot_copy expr (Lambda (retype, params, body_res)), lamtype)
-  | PostUnop _ -> failwith "postu"
+  | PostUnop (op, e) ->
+      let expr_res, expr_type = typecheck_expr e in
+      let op, res_type =
+        match (op, resolve_type expr_type) with
+        | OptionGet _, (_, Optiontype t, _) -> (OptionGet (Some t), t)
+        | OptionIsSome, (_, Optiontype _t, _) ->
+            (op, ([], Basetype "int", []))
+            (* TODO: Decide what TODO with bools*)
+        | OptionGet _, _ | OptionIsSome, _ ->
+            raise_type_error expr
+              (Printf.sprintf "Option operator requires option type, got %s"
+                 (show_perktype expr_type))
+        | _, t -> (op, t)
+      in
+      (annot_copy expr (PostUnop (op, expr_res)), res_type)
   | Parenthesised e -> typecheck_expr e
   | Subscript (container, accessor) -> (
       let container_res, container_type = typecheck_expr container in
@@ -419,12 +521,34 @@ and typecheck_expr (expr : expr_a) : expr_a * perktype =
       | Some (attrs, Modeltype (_name, archetypes, fields, constr_params), specs)
         ->
           let param_rets = List.map typecheck_expr params in
+          say_here
+            (Printf.sprintf "Summon: %s\n" (show_perktype (Option.get typ))
+            ^ Printf.sprintf "constr_params: %s\n"
+                (String.concat ", " (List.map show_perktype constr_params))
+            ^ Printf.sprintf "params: %s\n"
+                (String.concat ", "
+                   (List.map show_perktype (List.map snd param_rets))));
+          flush stdout;
           let param_rets =
-            List.map2
-              (fun (a, b) c -> fill_nothing a b c)
-              param_rets constr_params
+            if List.length param_rets <> List.length constr_params then
+              raise_type_error expr
+                (Printf.sprintf
+                   "Wrong number of parameters passed to constructor: expected \
+                    %d, got %d%s"
+                   (List.length constr_params)
+                   (List.length param_rets)
+                   (if List.exists (fun (_typ, id) -> id = "constructor") fields
+                    then ""
+                    else ". Constructor is not defined"))
+            else
+              List.map2
+                (fun (a, b) c -> fill_nothing a b c)
+                param_rets constr_params
           in
-          let _ = match_type_list constr_params param_rets in
+          let _ =
+            try match_type_list constr_params param_rets
+            with Type_match_error msg -> raise_type_error expr msg
+          in
           ( annot_copy expr (Summon (typeid, List.map fst param_rets)),
             (attrs, Modeltype (typeid, archetypes, fields, constr_params), specs)
           )
@@ -541,7 +665,10 @@ and typecheck_expr (expr : expr_a) : expr_a * perktype =
           let exprs_res = List.map typecheck_expr xs in
           let exprs_e = List.map fst exprs_res in
           (* let exprs_t = List.map snd exprs_res in *)
-          let _ = match_type_list constant_list exprs_res in
+          let _ =
+            try match_type_list constant_list exprs_res
+            with Type_match_error msg -> raise_type_error expr msg
+          in
           let arraytype =
             ([], Arraytype (xtyp, Some (List.length xs + 1)), [])
           in
@@ -562,11 +689,16 @@ and match_types ?(coalesce : bool = false) (expected : perktype)
     (actual : perktype) : perktype =
   let expected = resolve_type expected in
   let actual = resolve_type actual in
-  (* This catches the case where one type has not been bound yet and thus results as a basetype *)
-  if type_descriptor_of_perktype expected = type_descriptor_of_perktype actual
-  then actual
-  else
-    let rec match_types_aux expected actual =
+  let rec match_types_aux expected actual =
+    (* This catches the case where one type has not been bound yet and thus results as a basetype *)
+    let equal =
+      try
+        type_descriptor_of_perktype expected
+        = type_descriptor_of_perktype actual
+      with Not_inferred _ -> false
+    in
+    if equal then actual
+    else
       let (_, expected', _), (_, actual', _) = (expected, actual) in
       match (expected', actual') with
       | Basetype t1, Basetype t2 when t1 = t2 -> actual
@@ -636,13 +768,13 @@ and match_types ?(coalesce : bool = false) (expected : perktype)
                 (Codegen.codegen_type ~expand:true actual))) *)
                   (show_perktype expected)
                   (show_perktype actual)))
-    in
-    match (coalesce, expected, actual) with
-    | _, (_, Optiontype t, _), (_, Optiontype s, _) ->
-        ([], Optiontype (match_types_aux t s), [])
-    | true, (_, Optiontype t, _), _ ->
-        ([], Optiontype (match_types_aux t actual), [])
-    | _, _, _ -> match_types_aux expected actual
+  in
+  match (coalesce, expected, actual) with
+  | _, (_, Optiontype t, _), (_, Optiontype s, _) ->
+      ([], Optiontype (match_types_aux t s), [])
+  | true, (_, Optiontype t, _), _ ->
+      ([], Optiontype (match_types_aux t actual), [])
+  | _, _, _ -> match_types_aux expected actual
 
 and match_type_list (expected : perktype list)
     (actual : (expr_a * perktype) list) : perktype list =
@@ -654,11 +786,16 @@ and match_type_list (expected : perktype list)
           "Function has a vararg with other parameters after it"
     | [], [] -> []
     | [ ([], Vararg, []) ], [] -> []
-    | [], _ | _, [] ->
+    | [], _ ->
         raise_type_error
           (fst (List.hd actual'))
           (Printf.sprintf "Expected %d parameters, but got %d"
              (List.length expected) (List.length actual))
+    | _, [] ->
+        raise
+          (Type_match_error
+             (Printf.sprintf "Expected %d parameters, but got %d"
+                (List.length expected) (List.length actual)))
     | [ ([], Vararg, []) ], a :: at ->
         snd a :: match_type_list_aux [ ([], Vararg, []) ] at
     | e :: et, a :: at ->

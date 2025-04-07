@@ -27,6 +27,14 @@ run: build
 	gcc -o test/test.out test/test.c
 	./test/test.out
 
+.PHONY: debug_run
+debug_run:
+	opam exec -- dune build --profile=dev
+	# OCAMLRUNPARAM=b ./_build/default/bin/perkc.exe test/test.perk
+	OCAMLRUNPARAM=b ./_build/default/bin/perkc.exe ../super_perkio/src/main.perk
+	gcc -o test/test.out test/test.c
+	./test/test.out
+
 .PHONY: extensions
 extensions:
 	cd perkelang-extension && \

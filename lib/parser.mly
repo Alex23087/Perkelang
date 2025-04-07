@@ -78,6 +78,7 @@ topleveldef:
   | Model i = Ident Colon il = ident_list LBrace l = perkdef_list RBrace                                   { annotate_2_code $loc (Ast.Model (i, il, l)) }
   | Model i = Ident LBrace l = perkdef_list RBrace                                                         { annotate_2_code $loc (Ast.Model (i, [], l)) }
   | Fun pf = perkfun                                                                                       { pf }
+  | error                                                                                             { raise (ParseError("top-level definition expected")) }
 
 command:
   | ic = InlineC                                                                                           { annotate_2_code $loc (Ast.InlineCCmd(ic)) }
@@ -191,7 +192,8 @@ perktype_partial:
   | t = perktype Question                                                                                  { Ast.Optiontype t }
   | Lt tys = separated_nonempty_list(Plus, Ident) Gt                                                       { Ast.ArchetypeSum (tys |> List.map (fun x -> ([], Ast.Basetype x, []))) }
   | error                                                                                                  { raise (ParseError("type expected")) }
-  | Lt error                                                                                               { raise (ParseError("Cannot have empty type sum")) }
+  | Lt error                                                                                               { raise (ParseError("Cannot have empty archetype sum")) }
+  | Lt separated_nonempty_list(Plus, Ident) error                                                          { raise (ParseError("Unterminated archetype sum")) }
 
 %inline binop:
   | Plus                                                                                                   { Ast.Add }
@@ -218,6 +220,8 @@ perktype_partial:
 %inline postunop:
   | PlusPlus                                                                                               { Ast.PostIncrement }
   | MinusMinus                                                                                             { Ast.PostDecrement }
+  | Bang                                                                                                   { Ast.OptionGet None }
+  | Question                                                                                               { Ast.OptionIsSome }
 
 
 /* New nonterminals for disambiguated lists */

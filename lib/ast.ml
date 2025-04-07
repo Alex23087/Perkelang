@@ -94,9 +94,11 @@ type preunop =
 type postunop =
   | PostIncrement
   | PostDecrement
+  | OptionGet of perktype option
+  | OptionIsSome
 [@@deriving show, eq]
 
-type perkdef = perkdecl * expr_a [@@deriving show, eq]
+and perkdef = perkdecl * expr_a [@@deriving show, eq]
 
 (* name, attributes, methods *)
 (* and perklass = Class of perkident * (perkdef list) * (perkfun list) [@@deriving show, eq] *)
@@ -160,6 +162,6 @@ and command_a = command_t annotated [@@deriving show, eq]
 and topleveldef_a = topleveldef_t annotated [@@deriving show, eq]
 
 let say_here (_msg : string) : unit =
-  (* Printf.printf "%s\n" msg;
+  (* Printf.printf "%s\n" _msg;
   flush stdout *)
   ()

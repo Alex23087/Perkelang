@@ -7,7 +7,8 @@ import { execSync } from 'child_process';
 export function activate(context: vscode.ExtensionContext) {
     const diagnosticCollection = vscode.languages.createDiagnosticCollection('Perkelang');
 
-    vscode.workspace.onDidSaveTextDocument((document) => {
+    vscode.workspace.onDidChangeTextDocument((event) => {
+        const document = event.document;
         if (document.languageId === 'perkelang') {
             const diagnostics: vscode.Diagnostic[] = [];
 

@@ -34,6 +34,9 @@ let rec compile_program input_file =
          column %d\027[0m\n"
         start_line start_col msg end_line end_col;
       exit 1
+  | Perkelang.Parser.Error ->
+      Printf.eprintf "\027[31mParsing error: unexpected token\027[0m\n";
+      exit 1
 
 and process_file (filename : string) : string * string =
   let inchn = open_in filename in
@@ -43,17 +46,28 @@ and process_file (filename : string) : string * string =
     let parser =
       MenhirLib.Convert.Simplified.traditional2revised Perkelang.Parser.program
     in
-    try parser lexer
-    with ParseError e ->
-      raise
-        (Syntax_error
-           ( ( (fst (Sedlexing.lexing_positions lexbuf)).pos_lnum,
-               (fst (Sedlexing.lexing_positions lexbuf)).pos_cnum
-               - (fst (Sedlexing.lexing_positions lexbuf)).pos_bol ),
-             ( (snd (Sedlexing.lexing_positions lexbuf)).pos_lnum,
-               (snd (Sedlexing.lexing_positions lexbuf)).pos_cnum
-               - (snd (Sedlexing.lexing_positions lexbuf)).pos_bol ),
-             e ))
+    try parser lexer with
+    | ParseError e ->
+        raise
+          (Syntax_error
+             ( ( (fst (Sedlexing.lexing_positions lexbuf)).pos_lnum,
+                 (fst (Sedlexing.lexing_positions lexbuf)).pos_cnum
+                 - (fst (Sedlexing.lexing_positions lexbuf)).pos_bol ),
+               ( (snd (Sedlexing.lexing_positions lexbuf)).pos_lnum,
+                 (snd (Sedlexing.lexing_positions lexbuf)).pos_cnum
+                 - (snd (Sedlexing.lexing_positions lexbuf)).pos_bol ),
+               e ))
+    | Perkelang.Parser.Error ->
+        raise
+          (Syntax_error
+             ( ( (fst (Sedlexing.lexing_positions lexbuf)).pos_lnum,
+                 (fst (Sedlexing.lexing_positions lexbuf)).pos_cnum
+                 - (fst (Sedlexing.lexing_positions lexbuf)).pos_bol ),
+               ( (snd (Sedlexing.lexing_positions lexbuf)).pos_lnum,
+                 (snd (Sedlexing.lexing_positions lexbuf)).pos_cnum
+                 - (snd (Sedlexing.lexing_positions lexbuf)).pos_bol ),
+               "Unhandled parsing error. If this happens to you, please open \
+                an issue on https://github.com/Alex23087/Perkelang/issues" ))
   in
 
   let ast = ast_of_channel inchn in

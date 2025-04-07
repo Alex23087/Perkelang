@@ -120,7 +120,11 @@ let rec type_descriptor_of_perktype (t : perktype) : string =
       "Sum" ^ String.concat "Plus" (List.map type_descriptor_of_perktype archs)
   | Modeltype (name, _archs, _decls, _constr_params) -> name
   | Optiontype t -> Printf.sprintf "%s_opt" (type_descriptor_of_perktype t)
-  | Infer -> raise (Not_inferred "Impossible: type has not been inferred")
+  | Infer ->
+      raise
+        (Not_inferred
+           "Impossible: type has not been inferred in \
+            type_descriptor_of_perktype")
   | Tupletype ts ->
       Printf.sprintf "tup_%s_le"
         (String.concat "__" (List.map type_descriptor_of_perktype ts))
@@ -140,6 +144,22 @@ let rec bind_type (id : perkident) (t : perktype) =
   say_here (Printf.sprintf "bind_type: %s" (show_perktype t));
   if not (Hashtbl.mem type_symbol_table id) then
     Hashtbl.add type_symbol_table id (t, None, dependencies_of_type t)
+(* else
+    match t with
+    | _, Basetype _, _
+    | _, Pointertype _, _
+    | _, Funtype _, _
+    | _, Arraytype _, _
+    | _, Structtype _, _
+    | _, ArchetypeSum _, _
+    | _, Optiontype _, _
+    | _, Tupletype _, _
+    | _, Vararg, _
+    | _, Infer, _ ->
+        ()
+    | _, ArcheType _, _ | _, Modeltype _, _ ->
+        raise
+          (Double_declaration (Printf.sprintf "Type %s already declared" id)) *)
 
 (* Replaces a type in the symbol table. Throws an exception if the name is not bound. Used by typecheck_deferred_function to replace temporary function types *)
 and rebind_type (id : perkident) (t : perktype) =
@@ -228,7 +248,9 @@ and dependencies_of_type (typ : perktype) : perkident list =
           in
           ( (name :: archetypes) @ decls_t @ constructor_params_t,
             constr_params_l )
-      | Optiontype t -> dependencies_of_type_aux t (typ :: lst)
+      | Optiontype t ->
+          let deps, visited = dependencies_of_type_aux t (typ :: lst) in
+          (type_descriptor_of_perktype typ :: deps, visited)
       | Tupletype ts ->
           let lst = typ :: lst in
           List.fold_left

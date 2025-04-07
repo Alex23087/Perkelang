@@ -2,7 +2,7 @@ function compile() {
     # make clean
     clear
     pkill perkc
-    make run
+    make debug_run
 }
 
 compile&
