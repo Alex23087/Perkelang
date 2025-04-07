@@ -9,7 +9,7 @@ let rec typecheck_program (ast : topleveldef_a list) : topleveldef_a list =
   let res = List.map typecheck_deferred_function res in
   (* Will it do it in the right order?? *)
   (* print_symbol_table (); *)
-  print_type_symbol_table ();
+  (* print_type_symbol_table (); *)
   res
 
 and typecheck_deferred_function (tldf : topleveldef_a) : topleveldef_a =
@@ -396,9 +396,18 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
         | _ -> raise_type_error func "Function type expected"
       in
       let param_rets =
-        List.map2
-          (fun par exp -> typecheck_expr ~expected_return:(Some exp) par)
-          params fun_param_types
+        (* TODO: Fix varargs for this *)
+        try
+          List.map2
+            (fun par exp -> typecheck_expr ~expected_return:(Some exp) par)
+            params fun_param_types
+        with Invalid_argument _ ->
+          raise_type_error expr
+            (Printf.sprintf
+               "Wrong number of parameters passed to function: expected %d, \
+                got %d"
+               (List.length fun_param_types)
+               (List.length params))
       in
       let _param_types =
         try match_type_list fun_param_types param_rets

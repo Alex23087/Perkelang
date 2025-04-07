@@ -29,6 +29,7 @@ let add_archetype (name : string) : (string, perktype) Hashtbl.t =
   Hashtbl.add archetype_hashtable name new_archetype;
   new_archetype
 
+(* TODO: Remove this. This info can be retrieved from type_symbol_table *)
 let get_archetype (name : string) : (string, perktype) Hashtbl.t =
   try Hashtbl.find archetype_hashtable name
   with Not_found ->
@@ -42,8 +43,8 @@ let add_binding_to_archetype (name : string) (id : perkident) (typ : perktype) :
 let add_import (lib : string) : unit =
   if not (List.mem lib !import_list) then import_list := lib :: !import_list
 
-let rec get_lambda (e : expr_a) : string * string =
-  try Hashtbl.find lambdas_hashmap e
+let rec codegen_lambda (e : expr_a) : string =
+  try fst (Hashtbl.find lambdas_hashmap e)
   with Not_found ->
     let id = fresh_var "lambda" in
     let compiled =
@@ -61,16 +62,16 @@ let rec get_lambda (e : expr_a) : string * string =
           let funtype =
             ([ Static ], Funtype (List.map (fun (t, _) -> t) args, retype), [])
           in
-          bin_function_type id funtype;
+          bind_function_type id funtype;
           Printf.sprintf "static %s %s(%s) {\n%s\n}" type_str id args_str
             body_str
           (* with Not_inferred s -> raise_type_error e s *)
       | _ -> failwith "get_lambda: not a lambda expression"
     in
     Hashtbl.add lambdas_hashmap e (id, compiled);
-    (id, compiled)
+    id
 
-and bin_function_type (ident : perkident) (typ : perktype) : unit =
+and bind_function_type (ident : perkident) (typ : perktype) : unit =
   try
     let _ = Hashtbl.find fundecl_symbol_table ident in
     ()
@@ -422,7 +423,7 @@ and codegen_fundef (t : perktype) (id : perkident) (args : perkvardesc list)
   in
   let body_str = codegen_command body 1 in
   let funtype = ([], Funtype (List.map (fun (t, _) -> t) args, t), []) in
-  bin_function_type id funtype;
+  bind_function_type id funtype;
   Printf.sprintf "%s %s(%s) {\n%s\n}" type_str id args_str body_str
 
 (* transforms a perktype into a C type *)
@@ -508,7 +509,7 @@ and codegen_expr (e : expr_a) : string =
       | OptionGet None -> raise_type_error e "Option get type was not inferred"
       | _ -> Printf.sprintf "%s%s" (codegen_expr e) (codegen_postunop op))
   | Parenthesised e -> Printf.sprintf "(%s)" (codegen_expr e)
-  | Lambda _ -> e |> get_lambda |> fst
+  | Lambda _ -> e |> codegen_lambda
   | Subscript (e1, e2) ->
       Printf.sprintf "%s[%s]" (codegen_expr e1) (codegen_expr e2)
   | Summon (typident, args) ->
@@ -618,10 +619,11 @@ and generate_types () =
     (* say_here "generate_types"; *)
     let _id, (_typ, _code, _deps) = List.hd !ft_list in
     if List.length _deps > 0 then
-      Printf.printf "Warning: Type %s depends on %s, not yet generated\n"
-        (List.hd (List.map fst !ft_list))
-        (List.hd
-           (List.map (fun (_, (_, _, d)) -> String.concat ", " d) !ft_list));
+      say_here
+        (Printf.sprintf "Warning: Type %s depends on %s, not yet generated\n"
+           (List.hd (List.map fst !ft_list))
+           (List.hd
+              (List.map (fun (_, (_, _, d)) -> String.concat ", " d) !ft_list)));
     let _code = Some (codegen_type_definition _typ) in
     ft_list := List.tl !ft_list;
     (* Remove dzpendency from other elements *)

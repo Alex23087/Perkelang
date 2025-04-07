@@ -52,7 +52,7 @@ model List {
             current = current.cdr!;
         };
         printf("%d ", current.car);
-        printf("\n");
+        printf("\n", 1);
     }
 }
 
@@ -78,7 +78,9 @@ model Button: UIElement, Eq {
     },
     
     let draw := () : void => {
-        printf("drawn button at (%f, %f)\n", self.posx, self.pos[1]);
+        // printf("drawn button at (%f, %f)\n", self.posx, self.pos[1]);
+        printf("drawn button at (%f, ", self.posx);
+        printf("%f)\n", self.pos[1]);
     }
 
     // let x = (EqPlusMonad){button->Eq, button->Monad, button->self}
@@ -121,7 +123,7 @@ fun main(): int {
     if (x?) {
         printf("x is some %d\n", x!);
     } else {
-        printf("x is nothing\n");
+        printf("x is nothing\n", "");
     };
 
     let list : List = summon List(0);
