@@ -46,6 +46,10 @@ type perktype_qualifier =
 type perktype_partial =
   | Basetype of string
   | Funtype of perktype list * perktype
+  | Lambdatype of
+      perktype list
+      * perktype
+      * perkvardesc list (* last member is free var list *)
   | Pointertype of perktype
   | Arraytype of perktype * int option
   | Structtype of string
@@ -114,7 +118,7 @@ and expr_t =
   | Apply of expr_a * expr_a list
   | Binop of binop * expr_a * expr_a
   | PreUnop of preunop * expr_a
-  | Lambda of perktype * perkvardesc list * command_a
+  | Lambda of perktype * perkvardesc list * command_a * perkvardesc list
   | PostUnop of postunop * expr_a
   | Parenthesised of expr_a
   | Subscript of expr_a * expr_a
@@ -164,7 +168,7 @@ and topleveldef_a = topleveldef_t annotated [@@deriving show, eq]
 
 let say_here (_msg : string) : unit =
   (* Printf.printf "%s\n" _msg;
-  flush stdout *)
+     flush stdout *)
   ()
 
 (* Utility function to add a parameter (i.e., self) to a type, iff it is a function *)

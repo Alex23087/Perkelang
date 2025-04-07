@@ -131,8 +131,8 @@ expr:
   | e1 = expr b = binop e2 = expr                                                                          { annotate_2_code $loc (Ast.Binop (b, e1, e2)) }
   | u = preunop e = expr                                                                                   { annotate_2_code $loc (Ast.PreUnop (u, e)) }
   | e = expr u = postunop %prec POSTFIX                                                                    { annotate_2_code $loc (Ast.PostUnop (u, e)) }
-  | LParen id_list = perkvardesc_list RParen Colon ret = perktype Bigarrow LBrace c = command RBrace       { annotate_2_code $loc (Ast.Lambda (ret, id_list, c)) }
-  | LParen RParen Colon ret = perktype Bigarrow LBrace c = command RBrace                                  { annotate_2_code $loc (Ast.Lambda (ret, [], c)) }
+  | LParen id_list = perkvardesc_list RParen Colon ret = perktype Bigarrow LBrace c = command RBrace       { annotate_2_code $loc (Ast.Lambda (ret, id_list, c, [])) }
+  | LParen RParen Colon ret = perktype Bigarrow LBrace c = command RBrace                                  { annotate_2_code $loc (Ast.Lambda (ret, [], c, [])) }
   | n = Integer                                                                                            { annotate_2_code $loc (Ast.Int (n)) }
   | f = Float                                                                                              { annotate_2_code $loc (Ast.Float (f)) }
   | c = Character                                                                                          { annotate_2_code $loc (Ast.Char (c)) }

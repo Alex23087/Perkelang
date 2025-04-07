@@ -260,9 +260,9 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
       bind_type_if_needed typ'';
       bind_var id typ'';
       (* Printf.printf "DefCmd: %s, deftype: %s\n" id
-        (match deftype with
-        | Some deftype -> show_perktype deftype
-        | None -> "None"); *)
+         (match deftype with
+         | Some deftype -> show_perktype deftype
+         | None -> "None"); *)
       annot_copy cmd (DefCmd (((typ'', id), expr_res), deftype))
   | Assign (lhs, rhs, _, _) ->
       let lhs_res, lhs_type = typecheck_expr lhs in
@@ -283,9 +283,9 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
         if equal_perktype exprval exprval_nocoal then None else Some exprval
       in
       (* Printf.printf "Assign: %s = %s, acctype: %s, rasstype: %s\n"
-        (show_perktype lhs_type) (show_perktype rhs_type)
-        (match acctype with Some t -> show_perktype t | None -> "None")
-        (match rasstype with Some t -> show_perktype t | None -> "None"); *)
+         (show_perktype lhs_type) (show_perktype rhs_type)
+         (match acctype with Some t -> show_perktype t | None -> "None")
+         (match rasstype with Some t -> show_perktype t | None -> "None"); *)
       annot_copy cmd (Assign (lhs_res, rhs_res, acctype, rasstype))
   | Seq (c1, c2) ->
       let c1_res = typecheck_command ~retype c1 in
@@ -356,6 +356,7 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
   | Switch _ -> cmd
   | Skip -> cmd
   | Banish id ->
+      (* TODO: Let banish unbind the future *)
       (match Option.map resolve_type (lookup_var id) with
       | None -> raise_syntax_error cmd ("Identifier " ^ id ^ " not found")
       | Some (_, Modeltype _, _) -> ()
@@ -393,6 +394,7 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
       let fun_param_types, fun_ret_type =
         match fun_type with
         | _, Funtype (param_types, ret_type), _ -> (param_types, ret_type)
+        | _, Lambdatype (param_types, ret_type, _), _ -> (param_types, ret_type)
         | _ -> raise_type_error func "Function type expected"
       in
       let param_rets =
@@ -442,7 +444,7 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
         | _, t -> t
       in
       (annot_copy expr (PreUnop (op, expr_res)), res_type)
-  | Lambda (retype, params, body) ->
+  | Lambda (retype, params, body, _) ->
       push_symbol_table ();
       List.iter
         (fun (typ, id) ->
@@ -455,8 +457,18 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
       in
       pop_symbol_table ();
       bind_type_if_needed lamtype;
+      let free_vars = fst (free_variables_expr expr) in
+      let free_vars =
+        List.map
+          (fun v ->
+            match lookup_var v with
+            | Some vt -> (vt, v)
+            | None ->
+                raise_type_error expr (Printf.sprintf "Unbound variable %s" v))
+          free_vars
+      in
       autocast
-        (annot_copy expr (Lambda (retype, params, body_res)))
+        (annot_copy expr (Lambda (retype, params, body_res, free_vars)))
         lamtype expected_return
   | PostUnop (op, e) ->
       let expr_res, expr_type = typecheck_expr e in
@@ -752,7 +764,7 @@ and match_types ?(coalesce : bool = false) (expected : perktype)
             (Type_match_error
                (Printf.sprintf "Type mismatch: expected %s,\ngot %s instead"
                   (* (Codegen.codegen_type ~expand:true expected)
-                (Codegen.codegen_type ~expand:true actual))) *)
+                     (Codegen.codegen_type ~expand:true actual))) *)
                   (show_perktype expected)
                   (show_perktype actual)))
   in
@@ -799,3 +811,77 @@ and autocast (expr : expr_a) (typ : perktype) (expected : perktype option) :
   match expected with
   | None -> (expr, typ)
   | Some t -> (annot_copy expr (Cast (t, expr)), t)
+
+(* returns pair of lists: FIRST LIST IS FREE VARS, SECOND LIST IS BOUND *)
+and free_variables_command (cmd : command_a) : perkident list * perkident list =
+  match ( $ ) cmd with
+  | InlineCCmd _ -> ([], [])
+  | Block c ->
+      let free, _ = free_variables_command c in
+      (free, [])
+  | Assign (e1, e2, _, _) ->
+      let free_e1, bound_e1 = free_variables_expr e1 in
+      let free_e2, bound_e2 = free_variables_expr e2 in
+      (free_e1 @ free_e2, bound_e1 @ bound_e2)
+  | Seq (c1, c2) ->
+      let free_c1, bound_c1 = free_variables_command c1 in
+      let free_c2, bound_c2 = free_variables_command c2 in
+      (list_minus (free_c1 @ free_c2) bound_c1, bound_c1 @ bound_c2)
+  | IfThenElse (e1, c1, c2) ->
+      let free_e1, _ = free_variables_expr e1 in
+      let free_c1, _ = free_variables_command c1 in
+      let free_c2, _ = free_variables_command c2 in
+      (free_e1 @ free_c1 @ free_c2, [])
+  | Whiledo (e1, c1) | Dowhile (e1, c1) ->
+      let free_e1, _ = free_variables_expr e1 in
+      let free_c1, _ = free_variables_command c1 in
+      (free_e1 @ free_c1, [])
+  | For (c1, e1, c2, c3) ->
+      (* ES THES FOCKEN REIGHT!?!?!?!? *)
+      (* for(a; b; {int a; int b}) *)
+      let free_e1, _ = free_variables_expr e1 in
+      let free_c1, bound_c1 = free_variables_command c1 in
+      let free_c2, bound_c2 = free_variables_command c2 in
+      let free_c3, _ = free_variables_command c3 in
+      ( free_c1 @ free_e1
+        @ list_minus free_c2 bound_c1
+        @ list_minus free_c3 (bound_c1 @ bound_c2),
+        bound_c1 @ bound_c2 )
+  | Expr e1 -> free_variables_expr e1
+  | Switch _ -> failwith "yomumsaho"
+  | Skip -> ([], [])
+  | Banish id -> ([ id ], []) (* TODO: needda somme morre thinkin' *)
+  | Return e1 -> free_variables_expr e1
+  | DefCmd (((_, id), def), _) ->
+      let free, _ = free_variables_expr def in
+      (free, [ id ])
+
+and free_variables_expr (e : expr_a) : perkident list * perkident list =
+  ( (match ( $ ) e with
+    | Nothing _ | Int _ | Float _ | Char _ | String _ -> []
+    | Something (e1, _) -> free_variables_expr e1 |> fst
+    | Pointer e1 -> free_variables_expr e1 |> fst
+    | Var id -> [ id ]
+    | Apply (e1, el) ->
+        fst (free_variables_expr e1)
+        @ List.flatten (List.map (fun x -> free_variables_expr x |> fst) el)
+    | Binop (_, e1, e2) ->
+        fst (free_variables_expr e1) @ fst (free_variables_expr e2)
+    | PreUnop (_, e1) | PostUnop (_, e1) -> fst (free_variables_expr e1)
+    | Lambda (_, params, body, _) ->
+        list_minus (fst (free_variables_command body)) (List.map snd params)
+    | Parenthesised e1 -> fst (free_variables_expr e1)
+    | Subscript (e1, e2) ->
+        fst (free_variables_expr e1) @ fst (free_variables_expr e2)
+    | TupleSubscript (e1, _) -> fst (free_variables_expr e1)
+    | Summon (_, el) ->
+        List.flatten (List.map (fun x -> fst (free_variables_expr x)) el)
+    | Access (e1, id, _) -> id :: fst (free_variables_expr e1)
+    | Tuple (el, _) | Array el ->
+        List.flatten (List.map (fun x -> fst (free_variables_expr x)) el)
+    | As (id, _) -> [ id ]
+    | Cast (_, e1) -> fst (free_variables_expr e1)),
+    [] )
+
+and list_minus (l1 : 'a list) (l2 : 'a list) : 'a list =
+  List.filter (fun x -> not (List.mem x l2)) l1

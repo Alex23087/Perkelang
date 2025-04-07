@@ -39,6 +39,18 @@ let resolve_type (typ : perktype) : perktype =
           in
           let ret_t, ret_l = resolve_type_aux ret params_l in
           ((a, Funtype (params_t, ret_t), q), ret_l)
+      | Lambdatype (params, ret, _free_vars) ->
+          let lst = typ :: lst in
+          let params_t, params_l =
+            List.fold_right
+              (fun param (acc, lst) ->
+                let res_t, res_l = resolve_type_aux param lst in
+                (res_t :: acc, res_l))
+              params ([], lst)
+          in
+          let ret_t, ret_l = resolve_type_aux ret params_l in
+          (* TODO: Check if free vars need to be resolved *)
+          ((a, Lambdatype (params_t, ret_t, _free_vars), q), ret_l)
       | Arraytype (t, n) ->
           let lst = typ :: lst in
           let ret_t, ret_l = resolve_type_aux t lst in
@@ -107,6 +119,11 @@ let rec type_descriptor_of_perktype (t : perktype) : string =
         String.concat "__" (List.map type_descriptor_of_perktype args)
       in
       Printf.sprintf "l_%s_to_%s_r" args_str (type_descriptor_of_perktype ret)
+  | Lambdatype (_args, _ret, free_vars) ->
+      let lambda_type_desc = type_descriptor_of_perktype ([], t, []) in
+      let environment_type_desc = type_descriptor_of_environment free_vars in
+      let capture_type_desc = lambda_type_desc ^ "_" ^ environment_type_desc in
+      capture_type_desc
   | Pointertype t -> Printf.sprintf "%s_ptr" (type_descriptor_of_perktype t)
   | Arraytype (t, None) ->
       Printf.sprintf "%s_arr" (type_descriptor_of_perktype t)
@@ -128,6 +145,11 @@ let rec type_descriptor_of_perktype (t : perktype) : string =
   | Tupletype ts ->
       Printf.sprintf "tup_%s_le"
         (String.concat "__" (List.map type_descriptor_of_perktype ts))
+
+and type_descriptor_of_environment (free_vars : perkvardesc list) : string =
+  "capturing_"
+  ^ String.concat "_"
+      (List.map (fun (typ, _id) -> type_descriptor_of_perktype typ) free_vars)
 
 (* Prints the symbol table 🤯 *)
 let print_type_symbol_table () =
@@ -187,6 +209,21 @@ and dependencies_of_type (typ : perktype) : perkident list =
       | Basetype _ -> ([], typ :: lst)
       | Pointertype t -> dependencies_of_type_aux ~voidize t (typ :: lst)
       | Funtype (params, ret) ->
+          let lst = typ :: lst in
+          let params_t, params_l =
+            List.fold_right
+              (fun param (acc, lst) ->
+                let res_t, res_l =
+                  dependencies_of_type_aux ~voidize:true param lst
+                in
+                (res_t @ acc, res_l))
+              params ([], lst)
+          in
+          let ret_t, ret_l =
+            dependencies_of_type_aux ~voidize:true ret (ret :: params_l)
+          in
+          ((type_descriptor_of_perktype typ :: params_t) @ ret_t, ret_l)
+      | Lambdatype (params, ret, _free_vars) ->
           let lst = typ :: lst in
           let params_t, params_l =
             List.fold_right
@@ -298,6 +335,10 @@ let rec bind_type_if_needed (typ : perktype) =
               bind_type typ';
               List.iter bind_type_if_needed _params;
               bind_type_if_needed _ret
+          | _, Lambdatype (_params, _ret, _free_variables), _ ->
+              bind_type typ';
+              List.iter bind_type_if_needed _params;
+              bind_type_if_needed _ret
           | _, Arraytype (t, _), _ ->
               bind_type typ';
               bind_type_if_needed t
@@ -311,7 +352,7 @@ let rec bind_type_if_needed (typ : perktype) =
           | _, Modeltype (_name, _archetypes, _decls, _constr_params), _ ->
               bind_type typ'
               (* ; List.iter (fun (typ, _id) -> bind_type_if_needed typ) decls;
-      List.iter (fun typ -> bind_type_if_needed typ) constr_params *)
+                 List.iter (fun typ -> bind_type_if_needed typ) constr_params *)
           | _, Optiontype t, _ ->
               bind_type typ';
               bind_type_if_needed t

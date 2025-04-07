@@ -43,13 +43,17 @@ let add_binding_to_archetype (name : string) (id : perkident) (typ : perktype) :
 let add_import (lib : string) : unit =
   if not (List.mem lib !import_list) then import_list := lib :: !import_list
 
+let lambda_environments : (string * string) list ref = ref []
+let lambda_capture_dummies : (string * string) list ref = ref []
+
 let rec codegen_lambda (e : expr_a) : string =
   try fst (Hashtbl.find lambdas_hashmap e)
   with Not_found ->
     let id = fresh_var "lambda" in
     let compiled =
       match ( $ ) e with
-      | Lambda (retype, args, body) ->
+      | Lambda (retype, args, body, _free_variables) ->
+          (* TODO: LAMBDA *)
           (* try *)
           let type_str = codegen_type retype in
           let args_str =
@@ -63,6 +67,7 @@ let rec codegen_lambda (e : expr_a) : string =
             ([ Static ], Funtype (List.map (fun (t, _) -> t) args, retype), [])
           in
           bind_function_type id funtype;
+          codegen_lambda_capture e funtype;
           Printf.sprintf "static %s %s(%s) {\n%s\n}" type_str id args_str
             body_str
           (* with Not_inferred s -> raise_type_error e s *)
@@ -94,17 +99,32 @@ and codegen_program (tldfs : topleveldef_a list) : string =
   ^ "\n\n"
   (* Write typedefs for functions*)
   (* ^ Hashtbl.fold
-      (fun _ v acc -> Printf.sprintf "%s%s;\n" acc (snd_3 v))
-      function_type_hashmap ""
-  ^ "\n" *)
+         (fun _ v acc -> Printf.sprintf "%s%s;\n" acc (snd_3 v))
+         function_type_hashmap ""
+     ^ "\n" *)
   (* Write typedefs for tuples *)
   (* ^ Hashtbl.fold
       (fun _ v acc -> Printf.sprintf "%s%s;\n" acc v)
       tuple_hashmap "" *)
   (* Write struct definitions *)
   (* ^ String.concat "\n" (List.rev !struct_def_list)
-  ^ "\n\n" *)
+     ^ "\n\n" *)
   ^ generate_types ()
+  ^ "\n"
+  (* Write environment typedefs *)
+  ^ (if List.length !lambda_environments = 0 then ""
+     else
+       "\n"
+       ^ String.concat ";\n"
+           (List.map (fun (_name, typ) -> typ) !lambda_environments)
+       ^ ";\n\n")
+  (* Write lambda capture dummies *)
+  ^ (if List.length !lambda_capture_dummies = 0 then ""
+     else
+       "\n"
+       ^ String.concat ";\n"
+           (List.map (fun (_name, typ) -> typ) !lambda_capture_dummies)
+       ^ ";\n\n")
   (* Write hoisted function signatures *)
   ^ Hashtbl.fold
       (fun id typ acc -> Printf.sprintf "%s%s;\n" acc (codegen_fundecl id typ))
@@ -146,13 +166,13 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
                          | Funtype (_params, _ret) ->
                              add_parameter_to_func void_pointer (a, typ, d)
                              (* ( a,
-                               Funtype
-                                 ( ( [],
-                                     Pointertype ([], Basetype "void", []),
-                                     [] )
-                                   :: params,
-                                   ret ),
-                               d ) *)
+                                Funtype
+                                  ( ( [],
+                                      Pointertype ([], Basetype "void", []),
+                                      [] )
+                                    :: params,
+                                    ret ),
+                                d ) *)
                          | _ -> ([], Pointertype (a, typ, d), [])
                        in
                        codegen_decl (typ, id))
@@ -170,25 +190,25 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
       in
       let archetype_decls = List.flatten archetype_decls in
       (* let missing_decl_name = ref ("", "") in
-      let (*theorem: *) has_all_the_right_things =
-        List.for_all
-          (fun (typ, id, arch) ->
-            if List.mem (typ, id) mems then true
-            else (
-              missing_decl_name := (arch, id);
-              false))
-          archetype_decls
-      in
-      if not has_all_the_right_things then
-        raise
-          (Type_error
-             ( (( @@ ) tldf).start_pos,
-               (( @@ ) tldf).end_pos,
-               Printf.sprintf
-                 "Model %s does not properly implement Archetype %s: missing \
-                  declaration for %s"
-                 name (fst !missing_decl_name) (snd !missing_decl_name) ))
-      else *)
+         let (*theorem: *) has_all_the_right_things =
+           List.for_all
+             (fun (typ, id, arch) ->
+               if List.mem (typ, id) mems then true
+               else (
+                 missing_decl_name := (arch, id);
+                 false))
+             archetype_decls
+         in
+         if not has_all_the_right_things then
+           raise
+             (Type_error
+                ( (( @@ ) tldf).start_pos,
+                  (( @@ ) tldf).end_pos,
+                  Printf.sprintf
+                    "Model %s does not properly implement Archetype %s: missing \
+                     declaration for %s"
+                    name (fst !missing_decl_name) (snd !missing_decl_name) ))
+         else *)
       let constructor =
         List.find_opt (fun ((_, id), _) -> id = "constructor") defs
       in
@@ -198,11 +218,13 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
             let selftype = self_type name in
             match (typ, ( $ ) expr) with
             | ( (attrs, Funtype (params, ret), specs),
-                Lambda (lret, lparams, lexpr) ) ->
+                Lambda (lret, lparams, lexpr, free_vars) ) ->
                 let (typ, id), expr =
                   ( ((attrs, Funtype (selftype :: params, ret), specs), id),
                     annot_copy expr
-                      (Lambda (lret, (selftype, "self") :: lparams, lexpr)) )
+                      (Lambda
+                         (lret, (selftype, "self") :: lparams, lexpr, free_vars))
+                  )
                 in
                 ((typ, id), expr)
             | _ -> ((typ, id), expr))
@@ -288,8 +310,7 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
                     id)
                 (List.flatten
                    (List.map
-                      (let f =
-                        fun (i, h) ->
+                      (let f (i, h) =
                          Hashtbl.fold (fun k v acc -> (i, k, v) :: acc) h []
                        in
                        f)
@@ -322,7 +343,7 @@ and codegen_command (cmd : command_a) (indentation : int) : string =
   | DefCmd ((t, e), deftype) -> indent_string ^ codegen_def t e deftype
   | Assign (l, r, lass_type, _rass_type) ->
       (* Printf.printf "Assignment type: %s\n"
-        (match lass_type with Some t -> show_perktype t | None -> "None"); *)
+         (match lass_type with Some t -> show_perktype t | None -> "None"); *)
       indent_string
       ^ (Printf.sprintf "%s = %s;"
            (match lass_type with
@@ -438,6 +459,7 @@ and codegen_type ?(expand : bool = false) (t : perktype) : string =
     | Basetype s -> s
     | Structtype s -> "struct " ^ s
     | Funtype _ -> type_descriptor_of_perktype t
+    | Lambdatype _ -> type_descriptor_of_perktype t
     | Pointertype ([], Structtype _, _) when expand -> "void*"
     | Pointertype t -> Printf.sprintf "%s*" (codegen_type t ~expand)
     | Arraytype (_at, _n) -> type_descriptor_of_perktype t
@@ -509,7 +531,7 @@ and codegen_expr (e : expr_a) : string =
       | OptionGet None -> raise_type_error e "Option get type was not inferred"
       | _ -> Printf.sprintf "%s%s" (codegen_expr e) (codegen_postunop op))
   | Parenthesised e -> Printf.sprintf "(%s)" (codegen_expr e)
-  | Lambda _ -> e |> codegen_lambda
+  | Lambda _ -> codegen_lambda e
   | Subscript (e1, e2) ->
       Printf.sprintf "%s[%s]" (codegen_expr e1) (codegen_expr e2)
   | Summon (typident, args) ->
@@ -610,8 +632,7 @@ and generate_types () =
   let ft_list =
     ref (Hashtbl.fold (fun k v acc -> (k, v) :: acc) type_symbol_table [])
   in
-  let sortfun =
-   fun (_, (_, _, d_a)) (_, (_, _, d_b)) ->
+  let sortfun (_, (_, _, d_a)) (_, (_, _, d_b)) =
     compare (List.length d_a) (List.length d_b)
   in
   ft_list := List.sort sortfun !ft_list;
@@ -734,13 +755,13 @@ and codegen_type_definition (t : perktype) : string =
               ^ ");")
           in
           (* let expanded_str =
-            Printf.sprintf "%s"
-              (codegen_type ret ~expand:false
-              ^ " (*)("
-              ^ String.concat ", "
-                  (List.map (fun t -> codegen_type t ~expand:false) args)
-              ^ ")")
-          in *)
+               Printf.sprintf "%s"
+                 (codegen_type ret ~expand:false
+                 ^ " (*)("
+                 ^ String.concat ", "
+                     (List.map (fun t -> codegen_type t ~expand:false) args)
+                 ^ ")")
+             in *)
           Hashtbl.replace type_symbol_table key (_t, Some typedef_str, _deps);
           typedef_str
       | _ ->
@@ -750,3 +771,55 @@ and codegen_type_definition (t : perktype) : string =
                "Unexpected type generation request: got %s. If you see this \
                 error, please file an issue at https://github.com/"
                (type_descriptor_of_perktype t)))
+
+and codegen_lambda_environment (free_vars : perkvardesc list) : string =
+  let environment_type_desc = type_descriptor_of_environment free_vars in
+  let tmp_typedef =
+    List.find_opt (fun (t, _) -> t = environment_type_desc) !lambda_environments
+  in
+  match tmp_typedef with
+  | Some _ -> environment_type_desc
+  | None ->
+      let environment_typedef =
+        Printf.sprintf "struct %s {%s;}" environment_type_desc
+          (String.concat "; "
+             (List.mapi
+                (fun i (typ, _id) ->
+                  Printf.sprintf "%s _%d" (type_descriptor_of_perktype typ) i)
+                free_vars))
+      in
+      lambda_environments :=
+        (environment_type_desc, environment_typedef) :: !lambda_environments;
+      environment_type_desc
+
+and codegen_lambda_capture (lambda : expr_a) (lamtype : perktype) : unit =
+  match ( $ ) lambda with
+  | Lambda (_retype, _args, _, free_vars) -> (
+      let lambda_type_desc = type_descriptor_of_perktype lamtype in
+      let environment_type_desc = codegen_lambda_environment free_vars in
+      let capture_type_desc = lambda_type_desc ^ "_" ^ environment_type_desc in
+      let tmp_typedef =
+        List.find_opt
+          (fun (t, _) -> t = capture_type_desc)
+          !lambda_capture_dummies
+      in
+      match tmp_typedef with
+      | Some _ -> ()
+      | None ->
+          let typedef =
+            Printf.sprintf "struct %s {struct %s env; %s func;};"
+              capture_type_desc environment_type_desc lambda_type_desc
+          in
+          let dummy =
+            Printf.sprintf "struct %s __perkelang_capture_dummy_%s"
+              environment_type_desc environment_type_desc
+          in
+          let alltogether = Printf.sprintf "%s\n%s" typedef dummy in
+          (* Printf.printf "%s\n\n\n\n\n\n" alltogether; *)
+          lambda_capture_dummies :=
+            (capture_type_desc, alltogether) :: !lambda_capture_dummies)
+  | _ ->
+      raise_type_error lambda
+        "Impossible: codegen_lambda_capture: not a lambda expression. If you \
+         see this error please file an issue at \
+         https://github.com/Alex23087/Perkelang/issues"

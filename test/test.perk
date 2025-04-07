@@ -88,6 +88,25 @@ model Button: UIElement, Eq {
 
 }
 
+
+
+model LambdaFarlocca {
+    let free_var_1 := 0,
+    let free_var_2 := 1,
+
+    let constructor := (free_var_1: float, free_var_2: float): void => {
+        self.free_var_1 = free_var_1;
+        self.free_var_2 = free_var_2;
+    },
+
+    let body := (param: int): int => {
+        // ...
+        return true;
+    }
+}
+
+let i:= 0
+
 fun main(): int {
     let but :Button= summon Button(10., 0.);
     let test : float? = some 10.;
@@ -133,8 +152,13 @@ fun main(): int {
 
     list.print_all();
 
+    printf("%d\n", i++);
+    let culo := main;
     banish but;
+    // culo();
 } 
+
+
 
 fun move(b: <UIElement>, x: float, y: float): void {
     b.posx = x;
