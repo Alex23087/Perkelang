@@ -120,7 +120,9 @@ let rec type_descriptor_of_perktype (t : perktype) : string =
       in
       Printf.sprintf "l_%s_to_%s_r" args_str (type_descriptor_of_perktype ret)
   | Lambdatype (_args, _ret, free_vars) ->
-      let lambda_type_desc = type_descriptor_of_perktype ([], t, []) in
+      let lambda_type_desc =
+        type_descriptor_of_perktype ([], Funtype (_args, _ret), [])
+      in
       let environment_type_desc = type_descriptor_of_environment free_vars in
       let capture_type_desc = lambda_type_desc ^ "_" ^ environment_type_desc in
       capture_type_desc
@@ -336,7 +338,10 @@ let rec bind_type_if_needed (typ : perktype) =
               List.iter bind_type_if_needed _params;
               bind_type_if_needed _ret
           | _, Lambdatype (_params, _ret, _free_variables), _ ->
+              (* TODO: LAMBDA pass env to function *)
               bind_type typ';
+              (* Bind the type of the underlying function *)
+              bind_type_if_needed ([], Funtype (_params, _ret), []);
               List.iter bind_type_if_needed _params;
               bind_type_if_needed _ret
           | _, Arraytype (t, _), _ ->

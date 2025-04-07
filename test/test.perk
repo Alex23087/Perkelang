@@ -1,166 +1,20 @@
 import "stdio.h"
-import "stdlib.h"
-import "malloc.h"
-import "stdint.h"
-
 extern printf : (char*, ...) -> int
 
-let true  := 1
-let false := 0
-
-archetype UIElement {
-    posx : float,
-    posy : float,
-
-    opt: float?,
-
-    draw : () -> void
-}
-
-archetype Eq {
-    eq : (int) -> int
-}
-
-model List {
-    let car : int = 0,
-    let cdr : List? = nothing,
-
-    let constructor := (car: int) : void => {
-        self.car = car;
-    },
-
-    let push_head := (x: int) : List => {
-        let newList := summon List(x);
-        newList.cdr = self;
-        return newList;
-    },
-
-    let push_tail := (x: int) : void => {
-        let newList := summon List(x);
-
-        let current := self;
-        while (current.cdr?) {
-            current = current.cdr!;
-        };
-        current.cdr = newList;
-    },
-
-    let print_all := () : void => {
-        let current := self;
-        while (current.cdr?) {
-            printf("%d ", current.car);
-            current = current.cdr!;
-        };
-        printf("%d ", current.car);
-        printf("\n", 1);
-    }
-}
-
-model Button: UIElement, Eq {
-    let constructor := (posx: float, posy: float): void => {
-        self.posx = posx;
-        self.posy = posy;
-    },
-
-    let eq := (other: int): int => {
-        let otherButton := 0;
-        return true;
-    },
-    
-    let posx : float = 0.,
-    let posy : float = 0.,
-    let opt: float? = some 0.0,
-
-    let pos: (float * float) = (self.posx, self.posy),
-
-    let where_am_i := () : (float * float) => {
-        return (self.posx, self.posy);
-    },
-    
-    let draw := () : void => {
-        // printf("drawn button at (%f, %f)\n", self.posx, self.pos[1]);
-        printf("drawn button at (%f, ", self.posx);
-        printf("%f)\n", self.pos[1]);
-    }
-
-    // let x = (EqPlusMonad){button->Eq, button->Monad, button->self}
-    // x->Eq->functia()
-
-}
-
-
-
-model LambdaFarlocca {
-    let free_var_1 := 0,
-    let free_var_2 := 1,
-
-    let constructor := (free_var_1: float, free_var_2: float): void => {
-        self.free_var_1 = free_var_1;
-        self.free_var_2 = free_var_2;
-    },
-
-    let body := (param: int): int => {
-        // ...
-        return true;
-    }
-}
-
-let i:= 0
-
 fun main(): int {
-    let but :Button= summon Button(10., 0.);
-    let test : float? = some 10.;
-    // let test1 : [Button]? = nothing;
-    // let test2 : Button? = nothing;
-    let bmaybe : float? = nothing;
-    let b :<UIElement> = (but ~> UIElement);
-    b.draw();
-    but.draw();
-    move(b, 20., 30.);
-    but.pos = but.where_am_i();
-    b.draw();
-    but.draw();
-    let b4 := true;
-    let b2 : int = true;
-    let b3 : int = 0 == 0;
+    let x := 42;
 
-    let testarray : [int 10] = [];
-    // for (let i := 0; i < 10; i++) {
-    //     testarray[i] = i;
-    // };
-
-    // for (let i: int = 0; i < 10; i++) {
-    //     printf("testarray[%d] = %d\n", i, testarray[i]);
-    // };
-
-    if ( true) {
-        let x : int = 20;
+    let test := (): int => {
+        printf("test %d\n", 696969);
     };
+    
+    test();
 
-    let x : int? = nothing;
+    sum(1, 2);
 
-    if (x?) {
-        printf("x is some %d\n", x!);
-    } else {
-        printf("x is nothing\n", "");
-    };
+    return 0;
+}
 
-    let list : List = summon List(0);
-    list.push_tail(1);
-    list.push_tail(2);
-    list.push_tail(3);
-
-    list.print_all();
-
-    printf("%d\n", i++);
-    let culo := main;
-    banish but;
-    // culo();
-} 
-
-
-
-fun move(b: <UIElement>, x: float, y: float): void {
-    b.posx = x;
-    b.posy = y;
+fun sum (a: int, b: int): int {
+    return a + b;
 }

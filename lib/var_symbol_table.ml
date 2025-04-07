@@ -53,3 +53,13 @@ let rebind_var_local symbol_table (id : perkident) (t : perktype) =
       else raise (Undeclared ("Identifier wasn't defined: " ^ id))
 
 let rebind_var = rebind_var_local var_symbol_table
+
+let get_all_global_identifiers () : string list =
+  let rec get_all_global_identifiers_aux symbol_table =
+    match symbol_table with
+    | tbl :: [] ->
+        Hashtbl.fold (fun id (_typ, _code, _deps) acc -> id :: acc) tbl []
+    | _tbl :: t -> get_all_global_identifiers_aux t
+    | [] -> failwith "No symbol table available"
+  in
+  get_all_global_identifiers_aux !var_symbol_table

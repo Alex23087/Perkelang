@@ -115,7 +115,7 @@ and expr_t =
   | String of string
   | Pointer of expr_a
   | Var of perkident
-  | Apply of expr_a * expr_a list
+  | Apply of expr_a * expr_a list * perktype option
   | Binop of binop * expr_a * expr_a
   | PreUnop of preunop * expr_a
   | Lambda of perktype * perkvardesc list * command_a * perkvardesc list
@@ -175,11 +175,16 @@ let say_here (_msg : string) : unit =
 and add_parameter_to_func (param_type : perktype) (func_type : perktype) :
     perktype =
   match func_type with
-  | _, Funtype (params, ret), _ ->
+  | _, Lambdatype (params, ret, free_vars), _ ->
       let new_params = param_type :: params in
-      ([], Funtype (new_params, ret), [])
+      ([], Lambdatype (new_params, ret, free_vars), [])
   | _ -> func_type
 
 and void_type : perktype = ([], Basetype "void", [])
 and void_pointer : perktype = ([], Pointertype ([], Basetype "void", []), [])
 and self_type (name : perkident) : perktype = ([], Basetype name, [])
+
+and get_underlying_fun_type (t : perktype) : perktype =
+  match t with
+  | a, Lambdatype (args, ret, _), q -> (a, Funtype (args, ret), q)
+  | _ -> failwith "get_underlying_fun_type: not a lambda type"
