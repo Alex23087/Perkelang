@@ -373,7 +373,8 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
       | None -> ());
       annot_copy cmd (Return e_res)
 
-and typecheck_expr (expr : expr_a) : expr_a * perktype =
+and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
+    expr_a * perktype =
   match ( $ ) expr with
   | Int _ -> (expr, ([], Basetype "int", []))
   | Float _ -> (expr, ([], Basetype "float", []))
@@ -394,7 +395,11 @@ and typecheck_expr (expr : expr_a) : expr_a * perktype =
         | _, Funtype (param_types, ret_type), _ -> (param_types, ret_type)
         | _ -> raise_type_error func "Function type expected"
       in
-      let param_rets = List.map typecheck_expr params in
+      let param_rets =
+        List.map2
+          (fun par exp -> typecheck_expr ~expected_return:(Some exp) par)
+          params fun_param_types
+      in
       let _param_types =
         try match_type_list fun_param_types param_rets
         with Type_match_error msg -> raise_type_error expr msg
@@ -441,7 +446,9 @@ and typecheck_expr (expr : expr_a) : expr_a * perktype =
       in
       pop_symbol_table ();
       bind_type_if_needed lamtype;
-      (annot_copy expr (Lambda (retype, params, body_res)), lamtype)
+      autocast
+        (annot_copy expr (Lambda (retype, params, body_res)))
+        lamtype expected_return
   | PostUnop (op, e) ->
       let expr_res, expr_type = typecheck_expr e in
       let op, res_type =
@@ -644,6 +651,7 @@ and typecheck_expr (expr : expr_a) : expr_a * perktype =
           in
           bind_type_if_needed arraytype;
           (annot_copy expr (Array (xexpr :: exprs_e)), arraytype))
+  | Cast (t, e) -> (annot_copy expr (Cast (t, fst (typecheck_expr e))), t)
 
 and fill_nothing (expr : expr_a) (exprtyp : perktype) (typ : perktype) :
     expr_a * perktype =
@@ -776,3 +784,9 @@ and match_type_list (expected : perktype list)
         typ :: match_type_list_aux et at
   in
   match_type_list_aux expected actual
+
+and autocast (expr : expr_a) (typ : perktype) (expected : perktype option) :
+    expr_a * perktype =
+  match expected with
+  | None -> (expr, typ)
+  | Some t -> (annot_copy expr (Cast (t, expr)), t)

@@ -551,6 +551,8 @@ and codegen_expr (e : expr_a) : string =
       Printf.sprintf "{%s}"
         (String.concat ", "
            (List.map (fun e -> Printf.sprintf "%s" (codegen_expr e)) es))
+  | Cast (t, e) ->
+      Printf.sprintf "((%s)%s)" (type_descriptor_of_perktype t) (codegen_expr e)
 
 (* struct {int is_empty; int value;} palle = {0,1}; *)
 
@@ -685,7 +687,7 @@ and codegen_type_definition (t : perktype) : string =
           (* Hashtbl.add function_type_hashmap t (type_str, typedef_str, expanded_str); *)
           typedef_str
       | [], Pointertype t, [] ->
-          Printf.sprintf "typedef %s %s;" (codegen_type t ~expand:true) key
+          Printf.sprintf "typedef %s* %s;" (codegen_type t ~expand:true) key
       | _, ArchetypeSum archs, _ ->
           let compiled =
             Printf.sprintf "struct %s {%svoid* self;};\ntypedef struct %s %s;"

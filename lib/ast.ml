@@ -124,6 +124,7 @@ and expr_t =
   | Tuple of expr_a list * perktype option
   | As of perkident * perktype list
   | Array of expr_a list
+  | Cast of perktype * expr_a
 [@@deriving show, eq]
 
 (* Syntax of the language *)
@@ -175,5 +176,6 @@ and add_parameter_to_func (param_type : perktype) (func_type : perktype) :
       ([], Funtype (new_params, ret), [])
   | _ -> func_type
 
+and void_type : perktype = ([], Basetype "void", [])
 and void_pointer : perktype = ([], Pointertype ([], Basetype "void", []), [])
 and self_type (name : perkident) : perktype = ([], Basetype name, [])
