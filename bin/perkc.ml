@@ -6,12 +6,12 @@ open Perkelang.Typecheck
 let rec compile_program input_file =
   let out_file = Filename.chop_suffix input_file ".perk" ^ ".c" in
 
-  let out_ast_file = Filename.chop_suffix input_file ".perk" ^ ".ast" in
+  (* let out_ast_file = Filename.chop_suffix input_file ".perk" ^ ".ast" in *)
   try
-    let ast, compiled = process_file input_file in
+    let _ast, compiled = process_file input_file in
 
-    let oaf = open_out out_ast_file in
-    output_string oaf ast;
+    (* let oaf = open_out out_ast_file in
+    output_string oaf ast; *)
     let oc = open_out out_file in
     output_string oc compiled;
     close_out oc

@@ -4,7 +4,7 @@ type location = {
 }
 [@@deriving show]
 
-let dummy_pos = { start_pos = (0, -1); end_pos = (0, -1) }
+let dummy_pos = { start_pos = (-1, -1); end_pos = (-1, -1) }
 
 let to_code_position (start_position, end_position) =
   let start_pos =

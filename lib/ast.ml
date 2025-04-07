@@ -165,3 +165,15 @@ let say_here (_msg : string) : unit =
   (* Printf.printf "%s\n" _msg;
   flush stdout *)
   ()
+
+(* Utility function to add a parameter (i.e., self) to a type, iff it is a function *)
+and add_parameter_to_func (param_type : perktype) (func_type : perktype) :
+    perktype =
+  match func_type with
+  | _, Funtype (params, ret), _ ->
+      let new_params = param_type :: params in
+      ([], Funtype (new_params, ret), [])
+  | _ -> func_type
+
+and void_pointer : perktype = ([], Pointertype ([], Basetype "void", []), [])
+and self_type (name : perkident) : perktype = ([], Basetype name, [])

@@ -1,57 +1,15 @@
 open Ast
 open Errors
-open Symbol_table
-
-let var_symbol_table : (perkident, perktype) Hashtbl.t list ref = ref []
-
-let push_symbol_table () =
-  var_symbol_table := Hashtbl.create 10 :: !var_symbol_table
-
-let pop_symbol_table () = var_symbol_table := List.tl !var_symbol_table
-
-let lookup_var (id : perkident) : perktype option =
-  let rec lookup_in_tables tables =
-    match tables with
-    | [] -> None
-    | h :: t ->
-        if Hashtbl.mem h id then Some (Hashtbl.find h id)
-        else lookup_in_tables t
-  in
-  lookup_in_tables !var_symbol_table
-
-let print_symbol_table () =
-  Printf.printf "Symbol Table:\n";
-  let print_table table =
-    Hashtbl.iter
-      (fun id typ ->
-        Printf.printf "Identifier: %s, Type: %s\n" id (Codegen.codegen_type typ))
-      table
-  in
-  List.iter print_table !var_symbol_table
-
-let bind_var (id : perkident) (t : perktype) =
-  match !var_symbol_table with
-  | [] -> failwith "No symbol table available"
-  | h :: _ ->
-      if Hashtbl.mem h id then
-        raise (Double_declaration ("Identifier already defined: " ^ id))
-      else Hashtbl.add h id t
-(* ;print_symbol_table () *)
-
-let rebind_var (id : perkident) (t : perktype) =
-  match !var_symbol_table with
-  | [] -> failwith "No symbol table available"
-  | h :: _ ->
-      if Hashtbl.mem h id then Hashtbl.replace h id t
-      else raise (Undeclared ("Identifier wasn't defined: " ^ id))
+open Type_symbol_table
+open Var_symbol_table
 
 let rec typecheck_program (ast : topleveldef_a list) : topleveldef_a list =
   push_symbol_table ();
   let res = List.map typecheck_topleveldef ast in
   let res = List.map typecheck_deferred_function res in
   (* Will it do it in the right order?? *)
-  (* print_symbol_table ();
-  print_type_symbol_table (); *)
+  (* print_symbol_table (); *)
+  print_type_symbol_table ();
   res
 
 and typecheck_deferred_function (tldf : topleveldef_a) : topleveldef_a =
@@ -97,7 +55,8 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
       let deftype =
         if equal_perktype typ'' typ''_nocoal then None else Some typ''
       in
-      (* Check if the type is a user-defined type *)
+      bind_type_if_needed typ';
+      bind_type_if_needed typ'';
       bind_var id typ'';
       annot_copy tldf (Def (((typ'', id), expr_res), deftype))
   | Fundef (ret_type, id, params, body) ->
@@ -105,7 +64,7 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
         ([], Funtype (List.map (fun (typ, _) -> typ) params, ret_type), [])
       in
       bind_var id funtype;
-      bind_type (type_descriptor_of_perktype funtype) funtype;
+      bind_type_if_needed funtype;
       annot_copy tldf (Fundef (ret_type, id, params, body))
       (* |> ignore; typecheck_deferred_function tldf *)
   | Extern (id, typ) ->
@@ -119,10 +78,18 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
       tldf
       (* annotate_dummy Skip *)
       (* Externs are only useful for type checking. No need to keep it for codegen step *)
-  | Archetype (name, decls) ->
-      (try bind_type name ([], ArcheType (name, decls), [])
-       with Double_declaration msg -> raise_type_error tldf msg);
-      tldf
+  | Archetype (name, decls) -> (
+      match lookup_type name with
+      | Some _ ->
+          raise_type_error tldf
+            (Printf.sprintf "Archetype %s is already defined" name)
+      | None ->
+          bind_type_if_needed ([], ArcheType (name, decls), []);
+          List.iter
+            (fun (typ, _id) ->
+              typ |> add_parameter_to_func void_pointer |> bind_type_if_needed)
+            decls;
+          tldf)
   | Model (ident, archetypes, fields) ->
       (* Check that the model is not already defined *)
       (let m = lookup_type ident in
@@ -225,14 +192,13 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
       push_symbol_table ();
       (* !!!!!WARNING!!!!! THIS CANNOT BE DONE LIKE THAT. MUST BE CHECKED AS FOR PROGRAM FOR HOISTED FUNCTIONS !!!!!WARNING!!!!! *)
       (* TODO: For some reason, you can write things like member[0] instead of self.member[0]. Investigate *)
-      bind_type_if_needed
+      let temp_model_type =
         ( [],
           Modeltype (ident, archetypes, List.map fst fields, constr_params),
-          [] );
-      bind_var "self"
-        ( [],
-          Modeltype (ident, archetypes, List.map fst fields, constr_params),
-          [] );
+          [] )
+      in
+      bind_type_if_needed temp_model_type;
+      bind_var "self" temp_model_type;
       let fields_res =
         List.map
           (fun ((typ, id), expr) ->
@@ -254,6 +220,10 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
           [] )
       in
       rebind_type (type_descriptor_of_perktype modeltype) modeltype;
+      List.iter
+        (fun ((typ, _id), _expr) ->
+          typ |> add_parameter_to_func modeltype |> bind_type_if_needed)
+        fields_res;
       annot_copy tldf (Model (ident, archetypes, fields_res))
 
 and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
@@ -275,7 +245,6 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
         | (_, Infer, _), _ -> expr_type
         | _ -> expr_type
       in
-      (* bind_type_if_needed typ'; *)
       let typ'' =
         try match_types ~coalesce:true typ' expr_type
         with Type_match_error msg -> raise_type_error cmd msg
@@ -287,7 +256,8 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
       let deftype =
         if equal_perktype typ'' typ''_nocoal then None else Some typ''
       in
-      (* Check if the type is a user-defined type *)
+      bind_type_if_needed typ';
+      bind_type_if_needed typ'';
       bind_var id typ'';
       (* Printf.printf "DefCmd: %s, deftype: %s\n" id
         (match deftype with

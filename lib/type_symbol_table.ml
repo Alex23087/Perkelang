@@ -134,16 +134,17 @@ let print_type_symbol_table () =
   Printf.printf "Type Symbol Table:\n";
   Hashtbl.iter
     (fun id (typ, _code, deps) ->
-      Printf.printf "Identifier: %s, Type: %s, Dependencies: [%s]\n" id
+      Printf.printf "%s: %s,\n\t[%s]\n\n" id
         (type_descriptor_of_perktype typ)
         (String.concat ", " deps))
     type_symbol_table
 
-(* Binds a type in the symble table. Throws an exception if the name has already been defined *)
-let rec bind_type (id : perkident) (t : perktype) =
+(* Binds a type in the symble table. NOT Throws an exception if the name has already been defined *)
+let rec bind_type (t : perktype) =
   say_here (Printf.sprintf "bind_type: %s" (show_perktype t));
-  if not (Hashtbl.mem type_symbol_table id) then
-    Hashtbl.add type_symbol_table id (t, None, dependencies_of_type t)
+  let id = type_descriptor_of_perktype t in
+  (* if not (Hashtbl.mem type_symbol_table id) then *)
+  Hashtbl.add type_symbol_table id (t, None, dependencies_of_type t)
 (* else
     match t with
     | _, Basetype _, _
@@ -167,12 +168,13 @@ and rebind_type (id : perkident) (t : perktype) =
     Hashtbl.replace type_symbol_table id (t, None, dependencies_of_type t)
   else raise (Undeclared ("Type not found in symbol table: " ^ id))
 
-(* Returns the dependencies of a type. This is used to sort them when generating the typedefs for the program. *)
+(* Returns the dependencies of a type. This is used to sort them when generating the typedefs for the program.*)
 and dependencies_of_type (typ : perktype) : perkident list =
   let typ = resolve_type typ in
   (* Auxiliary functions that takes a list as input to avoid circular dependencies *)
-  let rec dependencies_of_type_aux (typ : perktype) (lst : perktype list) :
-      perkident list * perktype list =
+  (* The voidize parameters controls whether models have to be erased to void*. This is needed to avoid circular dependencies *)
+  let rec dependencies_of_type_aux ?(voidize : bool = false) (typ : perktype)
+      (lst : perktype list) : perkident list * perktype list =
     say_here (Printf.sprintf "dependencies_of_type: %s\n\n" (show_perktype typ));
     if List.mem typ lst then
       ( (match typ with
@@ -183,26 +185,32 @@ and dependencies_of_type (typ : perktype) : perkident list =
       let _, typ', _ = typ in
       match typ' with
       | Basetype _ -> ([], typ :: lst)
-      | Pointertype t -> dependencies_of_type_aux t (typ :: lst)
+      | Pointertype t -> dependencies_of_type_aux ~voidize t (typ :: lst)
       | Funtype (params, ret) ->
           let lst = typ :: lst in
           let params_t, params_l =
             List.fold_right
               (fun param (acc, lst) ->
-                let res_t, res_l = dependencies_of_type_aux param lst in
+                let res_t, res_l =
+                  dependencies_of_type_aux ~voidize:true param lst
+                in
                 (res_t @ acc, res_l))
               params ([], lst)
           in
-          let ret_t, ret_l = dependencies_of_type_aux ret (ret :: params_l) in
+          let ret_t, ret_l =
+            dependencies_of_type_aux ~voidize:true ret (ret :: params_l)
+          in
           ((type_descriptor_of_perktype typ :: params_t) @ ret_t, ret_l)
-      | Arraytype (t, _) -> dependencies_of_type_aux t (typ :: lst)
+      | Arraytype (t, _) -> dependencies_of_type_aux ~voidize t (typ :: lst)
       | Structtype _t -> ([], lst)
       | ArcheType (name, decls) ->
           let lst = typ :: lst in
           let decls_t, decls_l =
             List.fold_right
               (fun (param, _ide) (acc, lst) ->
-                let res_t, res_l = dependencies_of_type_aux param lst in
+                let res_t, res_l =
+                  dependencies_of_type_aux ~voidize param lst
+                in
                 (res_t @ acc, res_l))
               decls ([], lst)
           in
@@ -211,51 +219,53 @@ and dependencies_of_type (typ : perktype) : perkident list =
           let lst = typ :: lst in
           List.fold_left
             (fun (acc, lst) param ->
-              let res_t, res_l = dependencies_of_type_aux param lst in
+              let res_t, res_l = dependencies_of_type_aux ~voidize param lst in
               (res_t @ acc, res_l))
             ([ type_descriptor_of_perktype typ ], lst)
             ts
       | Modeltype (name, archetypes, decls, constr_params) ->
           let lst = typ :: lst in
-          let decls =
-            List.map
-              (fun (typ, id) ->
-                match typ with
-                | a, Funtype (params, ret), d ->
-                    ( ( a,
-                        Funtype
-                          ( ([], Pointertype ([], Basetype name, []), [])
-                            :: params,
-                            ret ),
-                        d ),
-                      id )
-                | _ -> (typ, id))
-              decls
-          in
-          let decls_t, lst =
-            List.fold_right
-              (fun (param, _ide) (acc, lst) ->
-                let res_t, res_l = dependencies_of_type_aux param lst in
-                (res_t @ acc, res_l))
-              decls ([], lst)
-          in
-          let constructor_params_t, constr_params_l =
-            List.fold_left
-              (fun (acc, lst) param ->
-                let res_t, res_l = dependencies_of_type_aux param lst in
-                (res_t @ acc, res_l))
-              ([], lst) constr_params
-          in
-          ( (name :: archetypes) @ decls_t @ constructor_params_t,
-            constr_params_l )
+          if voidize then ([], lst)
+          else
+            let decls =
+              List.map
+                (fun (typ, id) ->
+                  match typ with
+                  | _a, Funtype (_params, _ret), _d ->
+                      (add_parameter_to_func (self_type name) typ, id)
+                  | _ -> (typ, id))
+                decls
+            in
+            let decls_t, lst =
+              List.fold_right
+                (fun (param, _ide) (acc, lst) ->
+                  let res_t, res_l =
+                    dependencies_of_type_aux ~voidize param lst
+                  in
+                  (res_t @ acc, res_l))
+                decls ([], lst)
+            in
+            let constructor_params_t, constr_params_l =
+              List.fold_left
+                (fun (acc, lst) param ->
+                  let res_t, res_l =
+                    dependencies_of_type_aux ~voidize param lst
+                  in
+                  (res_t @ acc, res_l))
+                ([], lst) constr_params
+            in
+            ( (name :: archetypes) @ decls_t @ constructor_params_t,
+              constr_params_l )
       | Optiontype t ->
-          let deps, visited = dependencies_of_type_aux t (typ :: lst) in
+          let deps, visited =
+            dependencies_of_type_aux ~voidize:true t (typ :: lst)
+          in
           (type_descriptor_of_perktype typ :: deps, visited)
       | Tupletype ts ->
           let lst = typ :: lst in
           List.fold_left
             (fun (acc, lst) param ->
-              let res_t, res_l = dependencies_of_type_aux param lst in
+              let res_t, res_l = dependencies_of_type_aux ~voidize param lst in
               (res_t @ acc, res_l))
             ([ type_descriptor_of_perktype typ ], lst)
             ts
@@ -270,33 +280,50 @@ and dependencies_of_type (typ : perktype) : perkident list =
 
 (* Binds a type in the type symbol table, only if it is a non-native type (e.g., tuples, options, models, etc.) *)
 let rec bind_type_if_needed (typ : perktype) =
-  say_here (Printf.sprintf "bind_type_if_needed: %s" (show_perktype typ));
-  let typ' = resolve_type typ in
-  match typ' with
-  | _, Basetype _t, _ -> ()
-  | _, Pointertype t, _ -> bind_type_if_needed t
-  | _, Funtype (_params, _ret), _ ->
-      bind_type (type_descriptor_of_perktype typ') typ'
-  (* List.iter bind_type_if_needed _params;
-      bind_type_if_needed _ret *)
-  | _, Arraytype (t, _), _ ->
-      bind_type (type_descriptor_of_perktype typ') typ';
-      bind_type_if_needed t
-  | _, Structtype _, _ -> ()
-  | _, ArcheType (name, _decls), _ ->
-      bind_type name typ'
-      (* ;List.iter (fun (typ, _id) -> bind_type_if_needed typ) _decls *)
-  | _, ArchetypeSum _ts, _ -> bind_type (type_descriptor_of_perktype typ') typ'
-  (* List.iter bind_type_if_needed _ts *)
-  | _, Modeltype (name, _archetypes, _decls, _constr_params), _ ->
-      bind_type name typ'
-      (* ; List.iter (fun (typ, _id) -> bind_type_if_needed typ) decls;
+  match typ with
+  | [], Infer, [] -> ()
+  | _ -> (
+      match lookup_type (type_descriptor_of_perktype typ) with
+      | Some _ -> ()
+      | None -> (
+          say_here
+            (Printf.sprintf "bind_type_if_needed: %s" (show_perktype typ));
+          let typ' = resolve_type typ in
+          match typ' with
+          | _, Basetype _t, _ -> ()
+          | _, Pointertype t, _ ->
+              bind_type typ;
+              bind_type_if_needed t
+          | _, Funtype (_params, _ret), _ ->
+              bind_type typ';
+              List.iter bind_type_if_needed _params;
+              bind_type_if_needed _ret
+          | _, Arraytype (t, _), _ ->
+              bind_type typ';
+              bind_type_if_needed t
+          | _, Structtype _, _ -> ()
+          | _, ArcheType (_name, _decls), _ ->
+              bind_type typ';
+              List.iter (fun (typ, _id) -> bind_type_if_needed typ) _decls
+          | _, ArchetypeSum _ts, _ ->
+              bind_type typ';
+              List.iter bind_type_if_needed _ts
+          | _, Modeltype (_name, _archetypes, _decls, _constr_params), _ ->
+              bind_type typ'
+              (* ; List.iter (fun (typ, _id) -> bind_type_if_needed typ) decls;
       List.iter (fun typ -> bind_type_if_needed typ) constr_params *)
-  | _, Optiontype t, _ ->
-      bind_type (type_descriptor_of_perktype typ') typ';
-      bind_type_if_needed t
-  | _, Tupletype ts, _ ->
-      bind_type (type_descriptor_of_perktype typ') typ';
-      List.iter bind_type_if_needed ts
-  | _, Vararg, _ -> ()
-  | _, Infer, _ -> ()
+          | _, Optiontype t, _ ->
+              bind_type typ';
+              bind_type_if_needed t
+          | _, Tupletype ts, _ ->
+              bind_type typ';
+              List.iter bind_type_if_needed ts
+          | _, Vararg, _ -> ()
+          | _, Infer, _ -> ()))
+
+(* Manually add code to the binding. Used by codegen functions for Models and Archetypes, where the struct code is generated during regular codegen, instead of at the end like for simple synthesized types like tuples and functions *)
+let add_code_to_type_binding (_typ : perktype) (code : string) : unit =
+  bind_type_if_needed _typ;
+  let key = type_descriptor_of_perktype _typ in
+  let _t, _code, _deps = Hashtbl.find type_symbol_table key in
+  Hashtbl.replace type_symbol_table key (_t, Some code, _deps)
