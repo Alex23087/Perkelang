@@ -121,7 +121,7 @@ let rec type_descriptor_of_perktype (t : perktype) : string =
       Printf.sprintf "l_%s_to_%s_r" args_str (type_descriptor_of_perktype ret)
   | Lambdatype (_args, _ret, free_vars) ->
       let lambda_type_desc =
-        type_descriptor_of_perktype ([], Funtype (_args, _ret), [])
+        type_descriptor_of_perktype (get_underlying_fun_type_void ([], t, []))
       in
       let environment_type_desc = type_descriptor_of_environment free_vars in
       let capture_type_desc = lambda_type_desc ^ "_" ^ environment_type_desc in
@@ -239,7 +239,14 @@ and dependencies_of_type (typ : perktype) : perkident list =
           let ret_t, ret_l =
             dependencies_of_type_aux ~voidize:true ret (ret :: params_l)
           in
-          ((type_descriptor_of_perktype typ :: params_t) @ ret_t, ret_l)
+          let underlying_deps, underlying_l =
+            dependencies_of_type_aux ~voidize:true
+              (get_underlying_fun_type_void typ)
+              lst
+          in
+          ( (type_descriptor_of_perktype typ :: params_t)
+            @ ret_t @ underlying_deps,
+            ret_l @ underlying_l )
       | Arraytype (t, _) -> dependencies_of_type_aux ~voidize t (typ :: lst)
       | Structtype _t -> ([], lst)
       | ArcheType (name, decls) ->
@@ -341,7 +348,8 @@ let rec bind_type_if_needed (typ : perktype) =
               (* TODO: LAMBDA pass env to function *)
               bind_type typ';
               (* Bind the type of the underlying function *)
-              bind_type_if_needed ([], Funtype (_params, _ret), []);
+              bind_type_if_needed (get_underlying_fun_type_void typ);
+              (* Bind the parameters and return type of the lambda *)
               List.iter bind_type_if_needed _params;
               bind_type_if_needed _ret
           | _, Arraytype (t, _), _ ->

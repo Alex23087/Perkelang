@@ -36,68 +36,79 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
   | Import _ -> tldf
   | InlineC _ -> tldf
   | Def (((typ, id), expr), _) ->
-      let typ' = resolve_type typ in
-      let expr_res, expr_type = typecheck_expr expr in
-      let expr_type =
-        match (typ', expr_type) with
-        | _, (_, Infer, _) -> typ'
-        | (_, Infer, _), _ -> expr_type
-        | _ -> expr_type
-      in
-      let typ'' =
-        try match_types ~coalesce:true typ' expr_type
-        with Type_match_error msg -> raise_type_error tldf msg
-      in
-      let typ''_nocoal =
-        try match_types ~coalesce:false typ' expr_type
-        with Type_match_error _ -> ([], Infer, [])
-      in
-      let deftype =
-        if equal_perktype typ'' typ''_nocoal then None else Some typ''
-      in
-      bind_type_if_needed typ';
-      bind_type_if_needed typ'';
-      bind_var id typ'';
-      annot_copy tldf (Def (((typ'', id), expr_res), deftype))
+      if id = "self" then raise_type_error tldf "Identifier self is reserved"
+      else
+        let typ' = resolve_type typ in
+        let expr_res, expr_type = typecheck_expr expr in
+        let expr_type =
+          match (typ', expr_type) with
+          | _, (_, Infer, _) -> typ'
+          | (_, Infer, _), _ -> expr_type
+          | _ -> expr_type
+        in
+        let typ'' =
+          try match_types ~coalesce:true typ' expr_type
+          with Type_match_error msg -> raise_type_error tldf msg
+        in
+        let typ''_nocoal =
+          try match_types ~coalesce:false typ' expr_type
+          with Type_match_error _ -> ([], Infer, [])
+        in
+        let deftype =
+          if equal_perktype typ'' typ''_nocoal then None else Some typ''
+        in
+        bind_type_if_needed typ';
+        bind_type_if_needed typ'';
+        bind_var id typ'';
+        annot_copy tldf (Def (((typ'', id), expr_res), deftype))
   | Fundef (ret_type, id, params, body) ->
-      let funtype =
-        ([], Funtype (List.map (fun (typ, _) -> typ) params, ret_type), [])
-      in
-      bind_var id funtype;
-      bind_type_if_needed funtype;
-      annot_copy tldf (Fundef (ret_type, id, params, body))
-      (* |> ignore; typecheck_deferred_function tldf *)
+      if id = "self" then raise_type_error tldf "Identifier self is reserved"
+      else
+        let funtype =
+          ([], Funtype (List.map (fun (typ, _) -> typ) params, ret_type), [])
+        in
+        bind_var id funtype;
+        bind_type_if_needed funtype;
+        annot_copy tldf (Fundef (ret_type, id, params, body))
+        (* |> ignore; typecheck_deferred_function tldf *)
   | Extern (id, typ) ->
-      (match lookup_var id with
-      | Some _ ->
-          raise_type_error tldf
-            (Printf.sprintf "Identifier %s is already defined" id)
-      | None -> ());
+      (if id = "self" then raise_type_error tldf "Identifier self is reserved"
+       else
+         match lookup_var id with
+         | Some _ ->
+             raise_type_error tldf
+               (Printf.sprintf "Identifier %s is already defined" id)
+         | None -> ());
       bind_var id typ;
       bind_type_if_needed typ;
       tldf
       (* annotate_dummy Skip *)
       (* Externs are only useful for type checking. No need to keep it for codegen step *)
   | Archetype (name, decls) -> (
-      match lookup_type name with
-      | Some _ ->
-          raise_type_error tldf
-            (Printf.sprintf "Archetype %s is already defined" name)
-      | None ->
-          bind_type_if_needed ([], ArcheType (name, decls), []);
-          List.iter
-            (fun (typ, _id) ->
-              typ |> add_parameter_to_func void_pointer |> bind_type_if_needed)
-            decls;
-          tldf)
+      if name = "self" then raise_type_error tldf "Identifier self is reserved"
+      else
+        match lookup_type name with
+        | Some _ ->
+            raise_type_error tldf
+              (Printf.sprintf "Archetype %s is already defined" name)
+        | None ->
+            bind_type_if_needed ([], ArcheType (name, decls), []);
+            List.iter
+              (fun (typ, _id) ->
+                typ |> add_parameter_to_func void_pointer |> bind_type_if_needed)
+              decls;
+            tldf)
   | Model (ident, archetypes, fields) ->
-      (* Check that the model is not already defined *)
-      (let m = lookup_type ident in
-       match m with
-       | Some _ ->
-           raise_type_error tldf
-             (Printf.sprintf "Model %s is already defined" ident)
-       | None -> ());
+      (if ident = "self" then
+         raise_type_error tldf "Identifier self is reserved"
+       else
+         (* Check that the model is not already defined *)
+         let m = lookup_type ident in
+         match m with
+         | Some _ ->
+             raise_type_error tldf
+               (Printf.sprintf "Model %s is already defined" ident)
+         | None -> ());
       (* Get implemented archetypes *)
       let archetypes_t =
         List.map
@@ -165,7 +176,7 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
       in
       let constr_params =
         match constr with
-        | Some (((_, Funtype (params, ret), _), _), _) ->
+        | Some (((_, Lambdatype (params, ret, _), _), _), _) ->
             (* Check that constructor returns void *)
             let _ =
               try match_types ([], Basetype "void", []) ret
@@ -175,15 +186,16 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
         | Some (((_, Infer, _), _), expr) -> (
             let _expr_res, (_, expr_type, _) = typecheck_expr expr in
             match expr_type with
-            | Funtype (params, ret) ->
+            (* TODO: LAMBDA transform this *)
+            | Lambdatype (params, ret, _) ->
                 let _ =
                   try match_types ([], Basetype "void", []) ret
                   with Type_match_error msg -> raise_type_error tldf msg
                 in
                 params
-            | _ -> raise_type_error expr "constructor should be a function")
+            | _ -> raise_type_error expr "constructor should be a function 1")
         | Some (_, def) ->
-            raise_type_error def "constructor should be a function"
+            raise_type_error def "constructor should be a function 2"
             (* This error should go on the type, not on the definition. But for now, types are not annotated *)
         | None -> []
       in
@@ -236,34 +248,36 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
       pop_symbol_table ();
       annot_copy cmd (Block c_res)
   | DefCmd (((typ, id), expr), _) ->
-      let typ' = resolve_type typ in
-      let expr_res, expr_type = typecheck_expr expr in
-      let expr_res, expr_type = fill_nothing expr_res expr_type typ' in
-      let expr_type =
-        match (typ', expr_type) with
-        | _, (_, Infer, _) -> typ'
-        | (_, Infer, _), _ -> expr_type
-        | _ -> expr_type
-      in
-      let typ'' =
-        try match_types ~coalesce:true typ' expr_type
-        with Type_match_error msg -> raise_type_error cmd msg
-      in
-      let typ''_nocoal =
-        try match_types ~coalesce:false typ' expr_type
-        with Type_match_error _ -> ([], Infer, [])
-      in
-      let deftype =
-        if equal_perktype typ'' typ''_nocoal then None else Some typ''
-      in
-      bind_type_if_needed typ';
-      bind_type_if_needed typ'';
-      bind_var id typ'';
-      (* Printf.printf "DefCmd: %s, deftype: %s\n" id
-         (match deftype with
-         | Some deftype -> show_perktype deftype
-         | None -> "None"); *)
-      annot_copy cmd (DefCmd (((typ'', id), expr_res), deftype))
+      if id = "self" then raise_type_error cmd "Identifier self is reserved"
+      else
+        let typ' = resolve_type typ in
+        let expr_res, expr_type = typecheck_expr expr in
+        let expr_res, expr_type = fill_nothing expr_res expr_type typ' in
+        let expr_type =
+          match (typ', expr_type) with
+          | _, (_, Infer, _) -> typ'
+          | (_, Infer, _), _ -> expr_type
+          | _ -> expr_type
+        in
+        let typ'' =
+          try match_types ~coalesce:true typ' expr_type
+          with Type_match_error msg -> raise_type_error cmd msg
+        in
+        let typ''_nocoal =
+          try match_types ~coalesce:false typ' expr_type
+          with Type_match_error _ -> ([], Infer, [])
+        in
+        let deftype =
+          if equal_perktype typ'' typ''_nocoal then None else Some typ''
+        in
+        bind_type_if_needed typ';
+        bind_type_if_needed typ'';
+        bind_var id typ'';
+        (* Printf.printf "DefCmd: %s, deftype: %s\n" id
+           (match deftype with
+           | Some deftype -> show_perktype deftype
+           | None -> "None"); *)
+        annot_copy cmd (DefCmd (((typ'', id), expr_res), deftype))
   | Assign (lhs, rhs, _, _) ->
       let lhs_res, lhs_type = typecheck_expr lhs in
       let rhs_res, rhs_type = typecheck_expr rhs in
@@ -567,7 +581,7 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
         | _, Modeltype (name, _archetypes, fields, _constr_params), _ -> (
             let field = List.find_opt (fun (_, id) -> id = ide) fields in
             match field with
-            | Some (typ, _) -> (typ, None)
+            | Some (typ, _) -> (typ, Some expr_type)
             | None ->
                 raise_type_error expr
                   (Printf.sprintf "Field %s not found in model %s" ide name))
@@ -763,6 +777,10 @@ and match_types ?(coalesce : bool = false) (expected : perktype)
               (match_type_list t1
                  (List.map (fun t -> (annotate_dummy (Int (-1)), t)) t2)),
             [] )
+      | Funtype (params1, ret1), Lambdatype (params2, ret2, _) ->
+          let param_types = List.map2 match_types_aux params1 params2 in
+          let ret_type = match_types_aux ret1 ret2 in
+          ([], Lambdatype (param_types, ret_type, []), [])
       | _ ->
           raise
             (Type_match_error
@@ -887,7 +905,7 @@ and free_variables_expr (e : expr_a) : perkident list * perkident list =
       | TupleSubscript (e1, _) -> fst (free_variables_expr e1)
       | Summon (_, el) ->
           List.flatten (List.map (fun x -> fst (free_variables_expr x)) el)
-      | Access (e1, id, _) -> id :: fst (free_variables_expr e1)
+      | Access (e1, _id, _) -> fst (free_variables_expr e1)
       | Tuple (el, _) | Array el ->
           List.flatten (List.map (fun x -> fst (free_variables_expr x)) el)
       | As (id, _) -> [ id ]
@@ -897,7 +915,7 @@ and free_variables_expr (e : expr_a) : perkident list * perkident list =
   let out_free, out_bound = free_variables_expr e in
   ( list_minus
       (List.sort_uniq String.compare out_free)
-      (get_all_global_identifiers ()),
+      ("self" :: get_all_global_identifiers ()),
     List.sort_uniq String.compare out_bound )
 
 and list_minus (l1 : 'a list) (l2 : 'a list) : 'a list =

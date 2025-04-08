@@ -175,16 +175,33 @@ let say_here (_msg : string) : unit =
 and add_parameter_to_func (param_type : perktype) (func_type : perktype) :
     perktype =
   match func_type with
-  | _, Lambdatype (params, ret, free_vars), _ ->
+  | a, Lambdatype (params, ret, free_vars), d ->
       let new_params = param_type :: params in
-      ([], Lambdatype (new_params, ret, free_vars), [])
+      (a, Lambdatype (new_params, ret, free_vars), d)
+  | _ -> func_type
+
+(* Utility function to add a parameter (i.e., self) to a type, iff it is a function *)
+and add_parameter_to_func_2 (param_type : perktype) (func_type : perktype) :
+    perktype =
+  match func_type with
+  | a, Lambdatype (params, ret, free_vars), d ->
+      let new_params = List.hd params :: param_type :: List.tl params in
+      (a, Lambdatype (new_params, ret, free_vars), d)
   | _ -> func_type
 
 and void_type : perktype = ([], Basetype "void", [])
 and void_pointer : perktype = ([], Pointertype ([], Basetype "void", []), [])
 and self_type (name : perkident) : perktype = ([], Basetype name, [])
 
+and get_underlying_fun_type_void (t : perktype) : perktype =
+  match t with
+  | a, Lambdatype (args, ret, _), q ->
+      ( a,
+        Funtype (([], Pointertype ([], Basetype "void", []), []) :: args, ret),
+        q )
+  | _ -> failwith "get_underlying_fun_type_void: not a lambda type"
+
 and get_underlying_fun_type (t : perktype) : perktype =
   match t with
   | a, Lambdatype (args, ret, _), q -> (a, Funtype (args, ret), q)
-  | _ -> failwith "get_underlying_fun_type: not a lambda type"
+  | _ -> failwith "get_underlying_fun_type_void: not a lambda type"

@@ -4,6 +4,8 @@ open Type_symbol_table
 
 exception TypeError of string
 
+let fst_4 (x, _, _, _) = x
+let snd_4 (_, x, _, _) = x
 let fst_3 (x, _, _) = x
 let snd_3 (_, x, _) = x
 let thrd_3 (_, _, x) = x
@@ -17,7 +19,9 @@ let fresh_var (s : string) : string =
   fresh_var_counter := v + 1;
   Printf.sprintf "__perkelang_%s_%d" s v
 
-let lambdas_hashmap : (expr_a, string * string * string list) Hashtbl.t =
+(* Lambda expression, identifier, generated code, capture list, type_descriptor*)
+let lambdas_hashmap : (expr_a, string * string * string list * string) Hashtbl.t
+    =
   Hashtbl.create 10
 
 let fundecl_symbol_table : (perkident, perktype) Hashtbl.t = Hashtbl.create 10
@@ -49,10 +53,10 @@ let lambda_environments : (string * string) list ref = ref []
 let lambda_capture_dummies : (string * string) list ref = ref []
 
 let rec codegen_lambda (e : expr_a) : string =
-  try fst_3 (Hashtbl.find lambdas_hashmap e)
+  try fst_4 (Hashtbl.find lambdas_hashmap e)
   with Not_found ->
     let id = fresh_var "lambda" in
-    let compiled, free_variables =
+    let compiled, free_variables, type_descriptor =
       match ( $ ) e with
       | Lambda (retype, args, body, free_variables) ->
           (* TODO: LAMBDA *)
@@ -68,7 +72,7 @@ let rec codegen_lambda (e : expr_a) : string =
                      args)
           in
           let env_bind_str =
-            if List.length free_variables = 0 then ""
+            if List.length free_variables = 0 then "\n"
             else
               "\n"
               ^ (let envtype = type_descriptor_of_environment free_variables in
@@ -88,16 +92,23 @@ let rec codegen_lambda (e : expr_a) : string =
                 (List.map (fun (t, _) -> t) args, retype, free_variables),
               [] )
           in
-          bind_function_type id lambdatype;
-          codegen_lambda_capture e lambdatype;
+          bind_function_type id (add_parameter_to_func void_pointer lambdatype);
+          let type_descriptor =
+            type_descriptor_of_perktype
+              (get_underlying_fun_type_void lambdatype)
+          in
+          (* codegen_lambda_capture e lambdatype; *)
           ( Printf.sprintf "static %s %s(void* __env%s) {%s%s\n}" type_str id
               args_str env_bind_str body_str,
-            List.map snd free_variables )
+            List.map snd free_variables,
+            type_descriptor )
           (* with Not_inferred s -> raise_type_error e s *)
       | _ -> failwith "get_lambda: not a lambda expression"
     in
-    Hashtbl.add lambdas_hashmap e (id, compiled, free_variables);
-    Printf.sprintf "{{%s}, %s}" (String.concat ", " free_variables) id
+    Hashtbl.add lambdas_hashmap e (id, compiled, free_variables, type_descriptor);
+    Printf.sprintf "{{%s}, (%s) %s}"
+      (String.concat ", " free_variables)
+      type_descriptor id
 
 and bind_function_type (ident : perkident) (typ : perktype) : unit =
   try
@@ -135,19 +146,19 @@ and codegen_program (tldfs : topleveldef_a list) : string =
   ^ generate_types ()
   ^ "\n"
   (* Write environment typedefs *)
-  ^ (if List.length !lambda_environments = 0 then ""
-     else
-       "\n"
-       ^ String.concat ";\n"
-           (List.map (fun (_name, typ) -> typ) !lambda_environments)
-       ^ ";\n\n")
-  (* Write lambda capture dummies *)
-  ^ (if List.length !lambda_capture_dummies = 0 then ""
-     else
-       "\n"
-       ^ String.concat ";\n"
-           (List.map (fun (_name, typ) -> typ) !lambda_capture_dummies)
-       ^ ";\n\n")
+  (* ^ (if List.length !lambda_environments = 0 then ""
+        else
+          "\n"
+          ^ String.concat ";\n"
+              (List.map (fun (_name, typ) -> typ) !lambda_environments)
+          ^ ";\n\n")
+     (* Write lambda capture dummies *)
+     ^ (if List.length !lambda_capture_dummies = 0 then ""
+        else
+          "\n"
+          ^ String.concat ";\n"
+              (List.map (fun (_name, typ) -> typ) !lambda_capture_dummies)
+          ^ ";\n\n") *)
   (* Write hoisted function signatures *)
   ^ Hashtbl.fold
       (fun id typ acc -> Printf.sprintf "%s%s;\n" acc (codegen_fundecl id typ))
@@ -157,7 +168,7 @@ and codegen_program (tldfs : topleveldef_a list) : string =
   ^ body ^ "\n"
   (* Write lambdas *)
   ^ Hashtbl.fold
-      (fun _ v acc -> Printf.sprintf "%s\n%s\n" acc (snd_3 v))
+      (fun _ v acc -> Printf.sprintf "%s\n%s\n" acc (snd_4 v))
       lambdas_hashmap ""
 
 and codegen_topleveldef (tldf : topleveldef_a) : string =
@@ -224,9 +235,6 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
                      declaration for %s"
                     name (fst !missing_decl_name) (snd !missing_decl_name) ))
          else *)
-      let constructor =
-        List.find_opt (fun ((_, id), _) -> id = "constructor") defs
-      in
       let defs =
         List.map
           (fun ((typ, id), expr) ->
@@ -248,6 +256,9 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
             | _ -> ((typ, id), expr))
           defs
       in
+      let constructor =
+        List.find_opt (fun ((_, id), _) -> id = "constructor") defs
+      in
       let mems = List.map (fun ((typ, id), _) -> (typ, id)) defs in
       let params_str_with_types, params_str, params_typ =
         match constructor with
@@ -256,6 +267,7 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
             match typ with
             (* TODO: LAMBDA pass free vars to init *)
             | _, Lambdatype (params, _, _free_vars), _ ->
+                let params = List.tl params in
                 ( String.concat ", "
                     (List.mapi
                        (fun (i : int) (t : perktype) ->
@@ -331,8 +343,17 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
            ^ ";")
         (match constructor with
         | None -> ""
-        | Some _ ->
-            Printf.sprintf "%s    self->constructor(self%s);\n" indent_string
+        | Some constr ->
+            (* "(__perkelang_capture_dummy_%s = %s, \
+                   __perkelang_capture_dummy_%s.func(&(__perkelang_capture_dummy_%s.env)%s))" *)
+            let constr_type_desc =
+              type_descriptor_of_perktype (fst (fst constr))
+            in
+            Printf.sprintf
+              "%s    (__perkelang_capture_dummy_%s = self->constructor, \
+               __perkelang_capture_dummy_%s.func(self, \
+               &(__perkelang_capture_dummy_%s.env)%s));\n"
+              indent_string constr_type_desc constr_type_desc constr_type_desc
               params_str)
         indent_string
   | InlineC s -> s
@@ -514,10 +535,10 @@ and codegen_expr (e : expr_a) : string =
   | Var id -> id
   | Apply (e, args, _app_type) -> (
       (* TODO: LAMBDA handle application type *)
-      Printf.printf "Applying lambda with type %s\n"
-        (match _app_type with
-        | None -> "None"
-        | Some t -> type_descriptor_of_perktype t);
+      (* Printf.printf "Applying lambda with type %s\n"
+         (match _app_type with
+         | None -> "None"
+         | Some t -> type_descriptor_of_perktype t); *)
       let expr_str = codegen_expr e in
       let args_str = String.concat ", " (List.map codegen_expr args) in
       match _app_type with
@@ -529,22 +550,36 @@ and codegen_expr (e : expr_a) : string =
                 if List.length args = 0 then "" else ", " ^ args_str
               in
               match acctype with
+              | Some (_, Modeltype _, _) ->
+                  Printf.sprintf "%s(%s%s)" expr_str e1_str args_str
               | Some _t ->
-                  Printf.sprintf "%s(%s.self%s)" expr_str e1_str args_str
-              | None -> Printf.sprintf "%s(%s%s)" expr_str e1_str args_str)
+                  Printf.sprintf "%s(%s.self%s)" expr_str e1_str
+                    args_str (* this is for archetype sums *)
+              | None -> failwith "Impossible: no acctype for access"
+              (* this is for models *))
           | _ -> Printf.sprintf "%s(%s)" expr_str args_str)
       | Some lamtype -> (
           match ( $ ) e with
-          | Access (_e1, _, _acctype) ->
-              (* let e1_str = codegen_expr e1 in
-                 let args_str =
-                   if List.length args = 0 then "" else ", " ^ args_str
-                 in
-                 match acctype with
-                 | Some _t ->
-                     Printf.sprintf "%s(%s.self%s)" expr_str e1_str args_str
-                 | None -> Printf.sprintf "%s(%s%s)" expr_str e1_str args_str *)
-              failwith "TODO: LAMBDA handle application type"
+          | Access (e1, _, acctype) -> (
+              let e1_str = codegen_expr e1 in
+              let args_str =
+                if List.length args = 0 then "" else ", " ^ args_str
+              in
+              match acctype with
+              (* this is for models *)
+              | Some (_, Modeltype (_n, _, _, _), _) ->
+                  let lamtype = add_parameter_to_func (self_type _n) lamtype in
+                  let lamtype_desc = type_descriptor_of_perktype lamtype in
+                  Printf.sprintf
+                    "(__perkelang_capture_dummy_%s = %s, \
+                     __perkelang_capture_dummy_%s.func(&(__perkelang_capture_dummy_%s.env), \
+                     %s%s))"
+                    lamtype_desc expr_str lamtype_desc lamtype_desc e1_str
+                    args_str
+              | Some _t ->
+                  Printf.sprintf "%s(%s.self%s)" expr_str e1_str
+                    args_str (* this is for archetype sums *)
+              | None -> failwith "Impossible: no acctype for access")
           | _ ->
               let args_str =
                 if List.length args = 0 then "" else ", " ^ args_str
@@ -559,11 +594,13 @@ and codegen_expr (e : expr_a) : string =
                 args_str))
   | Access (e1, ide, acctype) -> (
       match acctype with
-      | None -> Printf.sprintf "%s->%s" (codegen_expr e1) ide
+      | Some (_, Modeltype _, _) ->
+          Printf.sprintf "%s->%s" (codegen_expr e1) ide
       | Some t ->
           Printf.sprintf "%s.%s.%s" (codegen_expr e1)
             (type_descriptor_of_perktype t)
-            ide)
+            ide
+      | None -> failwith "Impossible: no acctype for access")
   | Binop (op, e1, e2) ->
       Printf.sprintf "%s %s %s" (codegen_expr e1) (codegen_binop op)
         (codegen_expr e2)
@@ -683,15 +720,20 @@ and generate_types () =
     compare (List.length d_a) (List.length d_b)
   in
   ft_list := List.sort sortfun !ft_list;
+  List.iter
+    (fun (id, (_, _, deps)) ->
+      Printf.printf "Type: %s, Dependencies: [%s]\n" id
+        (String.concat ", " deps))
+    !ft_list;
   while List.length !ft_list > 0 do
     (* say_here "generate_types"; *)
     let _id, (_typ, _code, _deps) = List.hd !ft_list in
-    if List.length _deps > 0 then
-      say_here
-        (Printf.sprintf "Warning: Type %s depends on %s, not yet generated\n"
-           (List.hd (List.map fst !ft_list))
-           (List.hd
-              (List.map (fun (_, (_, _, d)) -> String.concat ", " d) !ft_list)));
+    (* if List.length _deps > 0 then *)
+    (* Printf.printf "%s\n"
+       (Printf.sprintf "Warning: Type %s depends on %s, not yet generated\n"
+          (List.hd (List.map fst !ft_list))
+          (List.hd
+             (List.map (fun (_, (_, _, d)) -> String.concat ", " d) !ft_list))); *)
     let _code = Some (codegen_type_definition _typ) in
     ft_list := List.tl !ft_list;
     (* Remove dzpendency from other elements *)
@@ -791,7 +833,7 @@ and codegen_type_definition (t : perktype) : string =
           in
           Hashtbl.replace type_symbol_table key (_t, Some compiled, _deps);
           compiled
-      | _, Lambdatype _, _ -> "" (* Lambdatypes are not generated as typedefs *)
+      | _, Lambdatype _, _ -> codegen_lambda_capture t
       | _ ->
           raise_type_error
             (annotate_dummy ([], Int (-1), []))
@@ -800,13 +842,14 @@ and codegen_type_definition (t : perktype) : string =
                 error, please file an issue at https://github.com/"
                (type_descriptor_of_perktype t)))
 
-and codegen_lambda_environment (free_vars : perkvardesc list) : string =
+and codegen_lambda_environment (free_vars : perkvardesc list) : string * string
+    =
   let environment_type_desc = type_descriptor_of_environment free_vars in
   let tmp_typedef =
     List.find_opt (fun (t, _) -> t = environment_type_desc) !lambda_environments
   in
   match tmp_typedef with
-  | Some _ -> environment_type_desc
+  | Some typedef -> (fst typedef, "")
   | None ->
       let environment_typedef =
         Printf.sprintf "typedef struct %s {%s;} %s" environment_type_desc
@@ -819,15 +862,17 @@ and codegen_lambda_environment (free_vars : perkvardesc list) : string =
       in
       lambda_environments :=
         (environment_type_desc, environment_typedef) :: !lambda_environments;
-      environment_type_desc
+      (environment_type_desc, environment_typedef)
 
-and codegen_lambda_capture (lambda : expr_a) (lamtype : perktype) : unit =
-  match ( $ ) lambda with
-  | Lambda (_retype, _args, _, free_vars) -> (
+and codegen_lambda_capture (lamtype : perktype) : string =
+  match lamtype with
+  | [], Lambdatype (_retype, _args, free_vars), [] -> (
       let lambda_type_desc =
-        type_descriptor_of_perktype (get_underlying_fun_type lamtype)
+        type_descriptor_of_perktype (get_underlying_fun_type_void lamtype)
       in
-      let environment_type_desc = codegen_lambda_environment free_vars in
+      let environment_type_desc, environment_typedef =
+        codegen_lambda_environment free_vars
+      in
       let capture_type_desc = lambda_type_desc ^ "_" ^ environment_type_desc in
       let tmp_typedef =
         List.find_opt
@@ -835,7 +880,7 @@ and codegen_lambda_capture (lambda : expr_a) (lamtype : perktype) : unit =
           !lambda_capture_dummies
       in
       match tmp_typedef with
-      | Some _ -> ()
+      | Some str -> snd str
       | None ->
           let typedef =
             Printf.sprintf "typedef struct %s {struct %s env; %s func;} %s;"
@@ -846,12 +891,15 @@ and codegen_lambda_capture (lambda : expr_a) (lamtype : perktype) : unit =
             Printf.sprintf "struct %s __perkelang_capture_dummy_%s"
               capture_type_desc capture_type_desc
           in
-          let alltogether = Printf.sprintf "%s\n%s" typedef dummy in
+          let alltogether =
+            Printf.sprintf "%s;\n%s;\n%s;" environment_typedef typedef dummy
+          in
           (* Printf.printf "%s\n\n\n\n\n\n" alltogether; *)
           lambda_capture_dummies :=
-            (capture_type_desc, alltogether) :: !lambda_capture_dummies)
+            (capture_type_desc, alltogether) :: !lambda_capture_dummies;
+          alltogether)
   | _ ->
-      raise_type_error lambda
+      failwith
         "Impossible: codegen_lambda_capture: not a lambda expression. If you \
          see this error please file an issue at \
          https://github.com/Alex23087/Perkelang/issues"
