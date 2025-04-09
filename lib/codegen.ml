@@ -81,8 +81,8 @@ let rec codegen_lambda (e : expr_a) : string =
               ^ String.concat ";\n"
                   (List.mapi
                      (fun i (t, id) ->
-                       Printf.sprintf "    %s %s = _env->_%d" (codegen_type t)
-                         id i)
+                       Printf.sprintf "    %s %s = (%s)_env->_%d"
+                         (codegen_type t) id (codegen_type t) i)
                      free_variables)
               ^ ";\n"
           in
@@ -107,7 +107,7 @@ let rec codegen_lambda (e : expr_a) : string =
     in
     Hashtbl.add lambdas_hashmap e (id, compiled, free_variables, type_descriptor);
     Printf.sprintf "{{%s}, (%s) %s}"
-      (String.concat ", " free_variables)
+      (String.concat ", " (List.map (fun s -> "(void*)" ^ s) free_variables))
       type_descriptor id
 
 and bind_function_type (ident : perkident) (typ : perktype) : unit =
@@ -118,6 +118,11 @@ and bind_function_type (ident : perkident) (typ : perktype) : unit =
 
 and codegen_program (tldfs : topleveldef_a list) : string =
   say_here "codegen_program";
+  filter_var_table ();
+  List.iter
+    (fun (id, typ) ->
+      Printf.printf "%s: %s\n" id (type_descriptor_of_perktype typ))
+    !all_vars;
   let body =
     String.concat "\n"
       (List.map
@@ -262,7 +267,7 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
                       id ),
                     annot_copy expr
                       (Lambda
-                         (lret, (selftype, "self") :: lparams, lexpr, free_vars))
+                         (lret, (selftype, "serf") :: lparams, lexpr, free_vars))
                   )
                 in
                 ((typ, id), expr)
@@ -827,11 +832,11 @@ and generate_types () =
     compare (List.length d_a) (List.length d_b)
   in
   ft_list := List.sort sortfun !ft_list;
-  List.iter
+  (* List.iter
     (fun (id, (_, _, deps)) ->
       Printf.printf "Type: %s, Dependencies: [%s]\n" id
         (String.concat ", " deps))
-    !ft_list;
+    !ft_list; *)
   while List.length !ft_list > 0 do
     (* say_here "generate_types"; *)
     let _id, (_typ, _code, _deps) = List.hd !ft_list in
@@ -949,8 +954,9 @@ and codegen_type_definition (t : perktype) : string =
                 error, please file an issue at https://github.com/"
                (type_descriptor_of_perktype t)))
 
-and codegen_lambda_environment (free_vars : perkvardesc list) : string * string
+and codegen_lambda_environment (_free_vars : perkvardesc list) : string * string
     =
+  let free_vars = List.map swizzle !all_vars in
   let environment_type_desc = type_descriptor_of_environment free_vars in
   let tmp_typedef =
     List.find_opt (fun (t, _) -> t = environment_type_desc) !lambda_environments
@@ -962,8 +968,8 @@ and codegen_lambda_environment (free_vars : perkvardesc list) : string * string
         Printf.sprintf "typedef struct %s {%s;} %s;" environment_type_desc
           (String.concat "; "
              (List.mapi
-                (fun i (typ, _id) ->
-                  Printf.sprintf "%s _%d" (type_descriptor_of_perktype typ) i)
+                (fun i (_typ, _id) -> Printf.sprintf "void* _%d" i)
+                  (* Printf.sprintf "%s _%d" (type_descriptor_of_perktype typ) i) *)
                 free_vars))
           environment_type_desc
       in

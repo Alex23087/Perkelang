@@ -149,10 +149,10 @@ let rec type_descriptor_of_perktype (t : perktype) : string =
       Printf.sprintf "tup_%s_le"
         (String.concat "__" (List.map type_descriptor_of_perktype ts))
 
-and type_descriptor_of_environment (free_vars : perkvardesc list) : string =
+and type_descriptor_of_environment (_free_vars : perkvardesc list) : string =
   "env_"
-  ^ String.concat "_"
-      (List.map (fun (typ, _id) -> type_descriptor_of_perktype typ) free_vars)
+(* ^ String.concat "_"
+      (List.map (fun (typ, _id) -> type_descriptor_of_perktype typ) free_vars) *)
 
 (* Prints the symbol table 🤯 *)
 let print_type_symbol_table () =

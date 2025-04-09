@@ -1,0 +1,15 @@
+import "stdio.h"
+
+extern printf: (char*, ...) -> void
+
+fun main() : int {
+    let x := 10;
+    let draw := (f: () -> void) : void => {
+        printf("Panano\n");
+        f();
+    };
+    draw((): void => {
+        printf("x = %d\n", x);
+    });
+    return 0;
+}

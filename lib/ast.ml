@@ -166,3 +166,11 @@ and topleveldef_t =
 and expr_a = expr_t annotated [@@deriving show, eq]
 and command_a = command_t annotated [@@deriving show, eq]
 and topleveldef_a = topleveldef_t annotated [@@deriving show, eq]
+
+let all_vars : (perkident * perktype) list ref = ref []
+
+let filter_var_table () =
+  all_vars :=
+    List.fold_left
+      (fun l (id, typ) -> if List.mem (id, typ) l then l else (id, typ) :: l)
+      [] !all_vars

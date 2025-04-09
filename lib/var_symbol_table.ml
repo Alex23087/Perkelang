@@ -38,6 +38,7 @@ let bind_var_local symbol_table (id : perkident) (t : perktype) =
   match !symbol_table with
   | [] -> failwith "No symbol table available"
   | h :: _ ->
+      all_vars := (id, t) :: !all_vars;
       if Hashtbl.mem h id then
         raise (Double_declaration ("Identifier already defined: " ^ id))
       else Hashtbl.add h id t

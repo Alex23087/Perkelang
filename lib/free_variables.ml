@@ -83,7 +83,7 @@ and free_variables_expr (e : expr_a) : perkident list * perkident list =
   let out_free, out_bound = free_variables_expr e in
   ( list_minus
       (List.sort_uniq String.compare out_free)
-      ("self" :: get_all_global_identifiers ()),
+      (get_all_global_identifiers ()),
     List.sort_uniq String.compare out_bound )
 
 and list_minus (l1 : 'a list) (l2 : 'a list) : 'a list =
