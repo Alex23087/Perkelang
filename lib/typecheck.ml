@@ -413,11 +413,7 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
         | _ -> raise_type_error func "Function type expected"
       in
       let param_rets =
-        (* TODO: Fix varargs for this *)
-        try
-          List.map2
-            (fun par exp -> typecheck_expr ~expected_return:(Some exp) par)
-            params fun_param_types
+        try typecheck_expr_list params fun_param_types
         with Invalid_argument _ ->
           raise_type_error expr
             (Printf.sprintf
@@ -691,6 +687,26 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
           bind_type_if_needed arraytype;
           (annot_copy expr (Array (xexpr :: exprs_e)), arraytype))
   | Cast (t, e) -> (annot_copy expr (Cast (t, fst (typecheck_expr e))), t)
+
+and typecheck_expr_list (exprs : expr_a list) (types : perktype list) :
+    (expr_a * perktype) list =
+  let typecheck_expr_list_aux (exps : expr_a list) (typs : perktype list) =
+    match (exps, typs) with
+    | [], [] -> []
+    | [], [ (_, Vararg, _) ] -> []
+    | [], _ | _, [] ->
+        raise
+          (Invalid_argument
+             (Printf.sprintf "Wrong number of parameters: expected %d got %d"
+                (List.length exprs) (List.length types)))
+    | x :: xs, [ (_, Vararg, _) ] ->
+        let x_res, x_type = typecheck_expr x in
+        (x_res, x_type) :: typecheck_expr_list xs typs
+    | x :: xs, t :: ts ->
+        let x_res, x_type = typecheck_expr ~expected_return:(Some t) x in
+        (x_res, x_type) :: typecheck_expr_list xs ts
+  in
+  typecheck_expr_list_aux exprs types
 
 and fill_nothing (expr : expr_a) (exprtyp : perktype) (typ : perktype) :
     expr_a * perktype =

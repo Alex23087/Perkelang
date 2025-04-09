@@ -1,0 +1,8 @@
+import "stdio.h"
+
+extern printf: (char*, ...) -> void
+
+fun main (): int {
+    printf("Hello, world!");
+    return 0;
+}

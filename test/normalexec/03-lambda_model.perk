@@ -1,0 +1,22 @@
+import "stdio.h"
+import "malloc.h"
+
+extern printf: (char*, ...) -> void
+
+model XContainer {
+    let x: int = 0
+}
+
+fun main (): int {
+    let x := summon XContainer();
+    x.x = 0;
+
+    let printx := (): void => {
+        printf("x = %d\n", x.x);
+    };
+
+    x.x = 2;
+    printx();
+
+    return 0;
+}

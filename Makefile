@@ -35,7 +35,7 @@ debug_run:
 	# ./test/test.out
 
 	OCAMLRUNPARAM=b ./_build/default/bin/perkc.exe ../super_perkio/src/main.perk
-	gcc -o ../super_perkio/out/super_perkio ../super_perkio/src/main.c
+	gcc -o ../super_perkio/out/super_perkio ../super_perkio/src/main.c -lSDL2
 	../super_perkio/out/super_perkio
 
 .PHONY: extensions
@@ -57,3 +57,30 @@ install: build uninstall
 uninstall:
 	sudo rm -rf $(PREFIX)
 	sudo rm -f /usr/local/bin/perkc
+
+.PHONY: test
+test: build
+	@COUNT=$$(ls -1 test/normalexec/*.perk | wc -l) ;\
+	CURRENT=0 ;\
+	for f in test/normalexec/*.perk ; \
+	do \
+		CURRENT=$$((CURRENT+1)) ;\
+		echo "[$$CURRENT/$$COUNT] Testing $$(basename $${f%.*})" ; \
+		EXPECTED="$${f%.*}.expected" ;\
+		RES=$$(_build/default/bin/perkc.exe $$f > /dev/null && gcc "$${f%.*}.c" -o "$$(dirname $$f)/a.out" && "$$(dirname $$f)/a.out") ; \
+		rm -f "$$(dirname $$f)/a.out" ;\
+		if [ $$? -eq 0 ]; then \
+			if [ -e "$$EXPECTED" ]; then \
+				echo "$$RES" | diff "$$EXPECTED" -;\
+				if [ $$? -eq 0 ]; then \
+					rm -f "$${f%.*}.c" ;\
+				else \
+					echo "Test Failed";\
+				fi ;\
+			else \
+				rm -f "$${f%.*}.c" ;\
+			fi;\
+		else \
+			echo "An error occurred while compiling $$(basename $${f%.*})" >&2;\
+		fi ;\
+	done
