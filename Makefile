@@ -80,8 +80,10 @@ test: build
 			else \
 				:;\
 				# rm -f "$${f%.*}.c" ;\
+				echo "$$RES" ;\
 			fi;\
 		else \
 			echo "An error occurred while compiling $$(basename $${f%.*})" >&2;\
+			echo "$$RES" >&2;\
 		fi ;\
 	done

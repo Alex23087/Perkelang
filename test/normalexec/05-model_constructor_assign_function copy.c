@@ -1,4 +1,5 @@
 #include <malloc.h>
+#include <malloc.h>
 #include <stdio.h>
 
 #define CAST_LAMBDA(name, from_type, to_type, func_type) ((__perkelang_capture_dummy_##from_type = name, (to_type) {__perkelang_capture_dummy_##from_type.env, (func_type)__perkelang_capture_dummy_##from_type.func}))

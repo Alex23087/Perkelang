@@ -128,8 +128,9 @@ and codegen_program (tldfs : topleveldef_a list) : string =
     |> String.trim
   in
   (* Write includes *)
-  String.concat "\n"
-    (List.map (fun lib -> Printf.sprintf "#include %s" lib) !import_list)
+  "#include <malloc.h>\n"
+  ^ String.concat "\n"
+      (List.map (fun lib -> Printf.sprintf "#include %s" lib) !import_list)
   ^ "\n\n"
   (* Write macros *)
   ^ "#define CAST_LAMBDA(name, from_type, to_type, func_type) \
@@ -410,6 +411,10 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
                    &(__perkelang_capture_dummy_%s.env)%s));\n"
                   indent_string constr_type_desc constr_type_desc
                   constr_type_desc params_str
+                |> ignore;
+                Printf.sprintf
+                  "%s    CALL_LAMBDA(self->constructor, %s, self%s);\n"
+                  indent_string constr_type_desc params_str
             | Funtype _ ->
                 Printf.sprintf "%s    self->constructor(%s);\n" indent_string
                   params_str
@@ -607,7 +612,7 @@ and codegen_expr (e : expr_a) : string =
       match _app_type with
       | None -> (
           match ( $ ) e with
-          | Access (e1, _, acctype) -> (
+          | Access (e1, _, acctype, _) -> (
               let e1_str = codegen_expr e1 in
               let args_str =
                 if List.length args = 0 then "" else ", " ^ args_str
@@ -623,7 +628,7 @@ and codegen_expr (e : expr_a) : string =
           | _ -> Printf.sprintf "%s(%s)" expr_str args_str)
       | Some lamtype -> (
           match ( $ ) e with
-          | Access (e1, _, acctype) -> (
+          | Access (e1, _, acctype, _) -> (
               let e1_str = codegen_expr e1 in
               let args_str =
                 if List.length args = 0 then "" else ", " ^ args_str
@@ -680,14 +685,20 @@ and codegen_expr (e : expr_a) : string =
                 Printf.sprintf "CALL_LAMBDA(%s, %s%s)" expr_str
                   (type_descriptor_of_perktype lamtype)
                   args_str))
-  | Access (e1, ide, acctype) -> (
+  | Access (e1, ide, acctype, rightype) -> (
       match Option.map resolve_type acctype with
       | Some (_, Modeltype _, _) ->
           Printf.sprintf "%s->%s" (codegen_expr e1) ide
-      | Some t ->
-          Printf.sprintf "%s.%s.%s" (codegen_expr e1)
-            (type_descriptor_of_perktype t)
-            ide
+      | Some t -> (
+          match Option.map discard_type_aq rightype with
+          | Some (Lambdatype _) | Some (Funtype _) ->
+              Printf.sprintf "%s.%s.%s" (codegen_expr e1)
+                (type_descriptor_of_perktype t)
+                ide
+          | Some _ | None ->
+              Printf.sprintf "*(%s.%s.%s)" (codegen_expr e1)
+                (type_descriptor_of_perktype t)
+                ide)
       | None -> failwith "Impossible: no acctype for access")
   | Binop (op, e1, e2) ->
       Printf.sprintf "%s %s %s" (codegen_expr e1) (codegen_binop op)

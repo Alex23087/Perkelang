@@ -316,7 +316,7 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
         with Type_match_error _ -> ([], Infer, [])
       in
       let acctype =
-        match ( $ ) lhs_res with Access (_, _, t) -> t | _ -> None
+        match ( $ ) lhs_res with Access (_, _, t, _) -> t | _ -> None
       in
       let rasstype =
         if equal_perktype exprval exprval_nocoal then None else Some exprval
@@ -600,14 +600,14 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
                typeid)
       | None -> raise_type_error expr (Printf.sprintf "Unknown type: %s" typeid)
       )
-  | Access (expr, ide, _) ->
+  | Access (expr, ide, _, _) ->
       let expr_res, expr_type = typecheck_expr expr in
-      let res_type, access_type =
+      let res_type, access_type, rightype =
         match resolve_type expr_type with
         | _, Modeltype (name, _archetypes, fields, _constr_params), _ -> (
             let field = List.find_opt (fun (_, id) -> id = ide) fields in
             match field with
-            | Some (typ, _) -> (typ, Some expr_type)
+            | Some (typ, _) -> (typ, Some expr_type, Some typ)
             | None ->
                 raise_type_error expr
                   (Printf.sprintf "Field %s not found in model %s" ide name))
@@ -627,26 +627,26 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
             match
               List.find_opt (fun (_arch, _t, id) -> id = ide) archs_with_idents
             with
-            | Some (arch, t, _id) -> (t, Some arch)
+            | Some (arch, t, _id) -> (t, Some arch, Some t)
             | None ->
                 raise_type_error expr
                   (Printf.sprintf
                      "Field %s not found in archetypes implemented by variable"
                      ide))
-        | _, ArcheType (_name, decls), _ -> (
+        (* | _, ArcheType (_name, decls), _ -> (
             match List.find_opt (fun (_t, id) -> id = ide) decls with
             | Some (t, _id) -> (t, Some (resolve_type expr_type))
             | None ->
                 raise_type_error expr
                   (Printf.sprintf
                      "Field %s not found in archetypes implemented by variable"
-                     ide))
+                     ide)) *)
         | _ ->
             raise_type_error expr
               (Printf.sprintf "Cannot access field %s of non-model type %s" ide
                  (show_perktype expr_type))
       in
-      (annot_copy expr (Access (expr_res, ide, access_type)), res_type)
+      (annot_copy expr (Access (expr_res, ide, access_type, rightype)), res_type)
   | Tuple (exprs, _) ->
       let exprs_res = List.map typecheck_expr exprs in
       let exprs_res = List.map (fun (a, b) -> fill_nothing a b b) exprs_res in

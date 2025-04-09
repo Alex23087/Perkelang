@@ -142,7 +142,7 @@ expr:
   | e1 = expr LBracket e2 = expr RBracket                                                                  { annotate_2_code $loc (Ast.Subscript (e1, e2)) }
   | Summon i = Ident LParen l = expr_list RParen                                                           { annotate_2_code $loc (Summon (i, l)) }
   | Summon i = Ident LParen RParen                                                                         { annotate_2_code $loc (Summon (i, [])) }
-  | e1 = expr Dot i = Ident                                                                                { annotate_2_code $loc (Ast.Access (e1, i, None)) }
+  | e1 = expr Dot i = Ident                                                                                { annotate_2_code $loc (Ast.Access (e1, i, None, None)) }
   | Nothing                                                                                                { annotate_2_code $loc (Ast.Nothing ([], Ast.Infer, [])) }
   | Something e = expr                                                                                     { annotate_2_code $loc (Ast.Something (e, ([], Ast.Infer, []))) }
   | LParen RParen                                                                                          { annotate_2_code $loc (Ast.Tuple ([], None)) }

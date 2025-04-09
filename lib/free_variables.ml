@@ -73,7 +73,7 @@ and free_variables_expr (e : expr_a) : perkident list * perkident list =
       | TupleSubscript (e1, _) -> fst (free_variables_expr e1)
       | Summon (_, el) ->
           List.flatten (List.map (fun x -> fst (free_variables_expr x)) el)
-      | Access (e1, _id, _) -> fst (free_variables_expr e1)
+      | Access (e1, _id, _, _) -> fst (free_variables_expr e1)
       | Tuple (el, _) | Array el ->
           List.flatten (List.map (fun x -> fst (free_variables_expr x)) el)
       | As (id, _) -> [ id ]

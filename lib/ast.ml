@@ -124,7 +124,7 @@ and expr_t =
   | Subscript of expr_a * expr_a
   | TupleSubscript of expr_a * int
   | Summon of perkident * expr_a list
-  | Access of expr_a * perkident * perktype option
+  | Access of expr_a * perkident * perktype option * perktype option
   | Tuple of expr_a list * perktype option
   | As of perkident * perktype list
   | Array of expr_a list

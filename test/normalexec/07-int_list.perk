@@ -1,0 +1,53 @@
+import "stdio.h"
+
+extern printf : (char*, ...) -> void
+
+model List {
+    let head : int = 0,
+    let tail : List? = none,
+
+    let push_head := (x: int) : List => {
+        let newList := summon List();
+        newList.head = x;
+        newList.tail = self;
+        return newList;
+    },
+
+    let push_tail := (x: int) : void => {
+        let newList := summon List();
+        newList.head = x;
+        let current := self;
+        while (current.tail?) {
+            current = current.tail!;
+        };
+        current.tail = newList;
+    },
+
+    let foreach : ((int) -> void) -> void = (f : (int) -> void) : void => {
+        f(self.head);
+        if (self.tail?) {
+            self.tail!.foreach(f);
+        }
+    }
+}
+
+fun main () : int {
+    let l := summon List();
+    l.push_tail(1);
+    l.push_tail(2);
+    l.push_tail(3);
+    l.push_tail(4);
+    l.push_tail(5);
+    l.push_tail(6);
+    l.push_tail(7);
+    l.push_tail(8);
+    l.push_tail(9);
+
+    let printx := (x: int) : void => {
+        printf("%d\n", x);
+    };
+
+    l.foreach(printx);
+
+    return 0;
+}
