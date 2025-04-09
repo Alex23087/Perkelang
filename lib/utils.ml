@@ -12,9 +12,9 @@ and add_parameter_to_func (param_type : perktype) (func_type : perktype) :
   | a, Lambdatype (params, ret, free_vars), d ->
       let new_params = param_type :: params in
       (a, Lambdatype (new_params, ret, free_vars), d)
-  (* | a, Funtype (params, ret), d ->
+  | a, Funtype (params, ret), d ->
       let new_params = param_type :: params in
-      (a, Funtype (new_params, ret), d) *)
+      (a, Funtype (new_params, ret), d)
   | _ -> func_type
 
 (* Utility function to add a parameter (i.e., self) to a type, iff it is a function *)
@@ -45,14 +45,17 @@ and func_of_lambda (t : perktype) : perktype =
 
 and lambdatype_of_func (typ : perktype) : perktype =
   match typ with
-  | a, Funtype (params, ret), q -> (a, Lambdatype (params, ret, []), q)
+  | a, Funtype (params, ret), q ->
+      (a, Lambdatype (List.map lambdatype_of_func params, ret, []), q)
   | _ -> typ
 
 and lambdatype_of_func_with_self (typ : perktype) (selftype : perktype) :
     perktype =
   match typ with
   | a, Funtype (params, ret), q ->
-      (a, Lambdatype (selftype :: params, ret, []), q)
+      ( a,
+        Lambdatype (selftype :: List.map lambdatype_of_func params, ret, []),
+        q )
   | _ -> typ
 
 and lambda_expr_of_func_expr_with_self (expr : expr_a) (fromtype : perktype)

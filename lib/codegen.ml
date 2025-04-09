@@ -132,6 +132,10 @@ and codegen_program (tldfs : topleveldef_a list) : string =
     (List.map (fun lib -> Printf.sprintf "#include %s" lib) !import_list)
   ^ "\n\n"
   (* Write macros *)
+  ^ "#define CAST_LAMBDA(name, from_type, to_type, func_type) \
+     ((__perkelang_capture_dummy_##from_type = name, (to_type) \
+     {__perkelang_capture_dummy_##from_type.env, \
+     (func_type)__perkelang_capture_dummy_##from_type.func}))\n"
   ^ "#define CALL_LAMBDA0(l, t) (__perkelang_capture_dummy_##t = l, \
      __perkelang_capture_dummy_##t.func(&(__perkelang_capture_dummy_##t.env)))\n"
   ^ "#define CALL_LAMBDA(l, t, ...) (__perkelang_capture_dummy_##t = l, \
@@ -354,6 +358,7 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
                       let arch_funtype =
                         codegen_type
                           (add_parameter_to_func void_pointer t
+                          |> add_parameter_to_func void_pointer
                           |> func_of_lambda)
                       in
                       let arch_lamtype =
@@ -362,12 +367,20 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
                       let lamtype =
                         codegen_type (add_parameter_to_func (self_type name) t)
                       in
-                      Printf.sprintf
+                      (* Printf.sprintf
                         "%s    self->%s.%s = (__perkelang_capture_dummy_%s = \
                          self->%s, (%s){__perkelang_capture_dummy_%s.env, \
                          (%s)__perkelang_capture_dummy_%s.func})"
                         indent_string a id lamtype id arch_lamtype lamtype
-                        arch_funtype lamtype
+                      arch_funtype lamtype *)
+                      (* TEMPORARILY EXPAND CAST *)
+                      Printf.sprintf
+                        "%s    self->%s.%s = CAST_LAMBDA(self->%s,\n\
+                         %s        %s,\n\
+                         %s        %s,\n\
+                         %s        %s)"
+                        indent_string a id id indent_string lamtype
+                        indent_string arch_lamtype indent_string arch_funtype
                   | _ ->
                       Printf.sprintf "%s    self->%s.%s = (%sself->%s"
                         indent_string a id
@@ -652,14 +665,21 @@ and codegen_expr (e : expr_a) : string =
               let args_str =
                 if List.length args = 0 then "" else ", " ^ args_str
               in
-              Printf.sprintf
+              (* Printf.sprintf
                 "(__perkelang_capture_dummy_%s = %s, \
                  __perkelang_capture_dummy_%s.func(&(__perkelang_capture_dummy_%s.env)%s))"
                 (type_descriptor_of_perktype lamtype)
                 expr_str
                 (type_descriptor_of_perktype lamtype)
                 (type_descriptor_of_perktype lamtype)
-                args_str))
+                args_str *)
+              if List.length args = 0 then
+                Printf.sprintf "CALL_LAMBDA0(%s, %s)" expr_str
+                  (type_descriptor_of_perktype lamtype)
+              else
+                Printf.sprintf "CALL_LAMBDA(%s, %s%s)" expr_str
+                  (type_descriptor_of_perktype lamtype)
+                  args_str))
   | Access (e1, ide, acctype) -> (
       match Option.map resolve_type acctype with
       | Some (_, Modeltype _, _) ->

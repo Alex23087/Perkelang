@@ -67,7 +67,11 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
       if id = "self" then raise_type_error tldf "Identifier self is reserved"
       else
         let funtype =
-          ([], Funtype (List.map (fun (typ, _) -> typ) params, ret_type), [])
+          ( [],
+            Funtype
+              ( List.map (fun (typ, _) -> typ |> lambdatype_of_func) params,
+                ret_type ),
+            [] )
         in
         bind_var id funtype;
         bind_type_if_needed funtype;
@@ -433,6 +437,7 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
             (param_types, ret_type, Some fun_type)
         | _ -> raise_type_error func "Function type expected"
       in
+      let fun_param_types = List.map lambdatype_of_func fun_param_types in
       let param_rets =
         try typecheck_expr_list params fun_param_types
         with Invalid_argument _ ->
@@ -480,9 +485,9 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
   | Lambda (retype, params, body, _) ->
       push_symbol_table ();
       (* TODO: Function parameters need to be lambdas *)
-      (* let params =
+      let params =
         List.map (fun (t, id) -> (lambdatype_of_func t, id)) params
-      in *)
+      in
       List.iter
         (fun (typ, id) ->
           try bind_var id typ
@@ -822,6 +827,15 @@ and match_types ?(coalesce : bool = false) (expected : perktype)
           let param_types = List.map2 match_types_aux params1 params2 in
           let ret_type = match_types_aux ret1 ret2 in
           ([], Lambdatype (param_types, ret_type, []), [])
+      | Lambdatype (params1, ret1, free1), Lambdatype (params2, ret2, free2)
+        when List.equal
+               (* For now, two lambdas have to be capturing the same values *)
+               (fun (typ1, id1) (typ2, id2) ->
+                 id1 = id2 && equal_perktype typ1 typ2)
+               free1 free2 ->
+          let param_types = List.map2 match_types_aux params1 params2 in
+          let ret_type = match_types_aux ret1 ret2 in
+          ([], Lambdatype (param_types, ret_type, free1), [])
       | Pointertype (_, Basetype "void", _), Modeltype (_, _, _, _) -> actual
       | _ ->
           raise
