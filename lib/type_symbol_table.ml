@@ -1,5 +1,6 @@
 open Ast
 open Errors
+open Utils
 
 let type_symbol_table :
     (perkident, perktype * string option * perkident list) Hashtbl.t =
@@ -121,7 +122,7 @@ let rec type_descriptor_of_perktype (t : perktype) : string =
       Printf.sprintf "l_%s_to_%s_r" args_str (type_descriptor_of_perktype ret)
   | Lambdatype (_args, _ret, free_vars) ->
       let lambda_type_desc =
-        type_descriptor_of_perktype (get_underlying_fun_type_void ([], t, []))
+        type_descriptor_of_perktype (func_of_lambda_void ([], t, []))
       in
       let environment_type_desc = type_descriptor_of_environment free_vars in
       let capture_type_desc = lambda_type_desc ^ "_" ^ environment_type_desc in
@@ -149,7 +150,7 @@ let rec type_descriptor_of_perktype (t : perktype) : string =
         (String.concat "__" (List.map type_descriptor_of_perktype ts))
 
 and type_descriptor_of_environment (free_vars : perkvardesc list) : string =
-  "capturing_"
+  "env_"
   ^ String.concat "_"
       (List.map (fun (typ, _id) -> type_descriptor_of_perktype typ) free_vars)
 
@@ -240,9 +241,7 @@ and dependencies_of_type (typ : perktype) : perkident list =
             dependencies_of_type_aux ~voidize:true ret (ret :: params_l)
           in
           let underlying_deps, underlying_l =
-            dependencies_of_type_aux ~voidize:true
-              (get_underlying_fun_type_void typ)
-              lst
+            dependencies_of_type_aux ~voidize:true (func_of_lambda_void typ) lst
           in
           ( (type_descriptor_of_perktype typ :: params_t)
             @ ret_t @ underlying_deps,
@@ -277,7 +276,7 @@ and dependencies_of_type (typ : perktype) : perkident list =
               List.map
                 (fun (typ, id) ->
                   match typ with
-                  | _a, Funtype (_params, _ret), _d ->
+                  | _a, Lambdatype (_params, _ret, _), _d ->
                       (add_parameter_to_func (self_type name) typ, id)
                   | _ -> (typ, id))
                 decls
@@ -348,7 +347,7 @@ let rec bind_type_if_needed (typ : perktype) =
               (* TODO: LAMBDA pass env to function *)
               bind_type typ';
               (* Bind the type of the underlying function *)
-              bind_type_if_needed (get_underlying_fun_type_void typ);
+              bind_type_if_needed (func_of_lambda_void typ);
               (* Bind the parameters and return type of the lambda *)
               List.iter bind_type_if_needed _params;
               bind_type_if_needed _ret

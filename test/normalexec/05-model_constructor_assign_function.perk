@@ -1,0 +1,21 @@
+import "stdio.h"
+import "malloc.h"
+
+extern printf: (char*, ...) -> void
+
+fun f (): void {
+    printf("f()\n");
+}
+
+model Test {
+    let constructor: () -> void = f,
+    let f: () -> void = f
+}
+
+fun main (): int {
+    // let x := summon Test();
+
+    let fu: () -> void = f;
+    fu();
+    return 0;
+}

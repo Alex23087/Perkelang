@@ -65,10 +65,10 @@ test: build
 	for f in test/normalexec/*.perk ; \
 	do \
 		CURRENT=$$((CURRENT+1)) ;\
-		echo "[$$CURRENT/$$COUNT] Testing $$(basename $${f%.*})" ; \
+		echo "[$$CURRENT/$$COUNT] Testing $$(basename "$${f%.*}")" ; \
 		EXPECTED="$${f%.*}.expected" ;\
-		RES=$$(_build/default/bin/perkc.exe $$f > /dev/null && gcc "$${f%.*}.c" -o "$$(dirname $$f)/a.out" && "$$(dirname $$f)/a.out") ; \
-		rm -f "$$(dirname $$f)/a.out" ;\
+		RES=$$(_build/default/bin/perkc.exe "$$f" > /dev/null && gcc "$${f%.*}.c" -o "$$(dirname $$f)/a.out" && "$$(dirname $$f)/a.out") ; \
+		# rm -f "$$(dirname $$f)/a.out" ;\
 		if [ $$? -eq 0 ]; then \
 			if [ -e "$$EXPECTED" ]; then \
 				echo "$$RES" | diff "$$EXPECTED" -;\
@@ -78,7 +78,8 @@ test: build
 					echo "Test Failed";\
 				fi ;\
 			else \
-				rm -f "$${f%.*}.c" ;\
+				:;\
+				# rm -f "$${f%.*}.c" ;\
 			fi;\
 		else \
 			echo "An error occurred while compiling $$(basename $${f%.*})" >&2;\

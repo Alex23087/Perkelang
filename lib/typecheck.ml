@@ -1,7 +1,9 @@
 open Ast
 open Errors
+open Utils
 open Type_symbol_table
 open Var_symbol_table
+open Free_variables
 
 let rec typecheck_program (ast : topleveldef_a list) : topleveldef_a list =
   push_symbol_table ();
@@ -92,12 +94,15 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
             raise_type_error tldf
               (Printf.sprintf "Archetype %s is already defined" name)
         | None ->
+            let decls =
+              List.map (fun (typ, id) -> (typ |> lambdatype_of_func, id)) decls
+            in
+            List.iter bind_type_if_needed
+              (List.map
+                 (fun d -> d |> fst |> add_parameter_to_func void_pointer)
+                 decls);
             bind_type_if_needed ([], ArcheType (name, decls), []);
-            List.iter
-              (fun (typ, _id) ->
-                typ |> add_parameter_to_func void_pointer |> bind_type_if_needed)
-              decls;
-            tldf)
+            annot_copy tldf (Archetype (name, decls)))
   | Model (ident, archetypes, fields) ->
       (if ident = "self" then
          raise_type_error tldf "Identifier self is reserved"
@@ -142,6 +147,18 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
                       before")
              archetypes_t)
       in
+      (* Transform all functions into lambdas *)
+      (* let fields =
+        List.map
+          (fun f -> lambda_def_of_func_def_with_self f (self_type ident))
+          fields
+      in *)
+      let fields = List.map (fun f -> lambda_def_of_func_def f) fields in
+      (* let fields =
+        List.map
+          (fun ((typ, id), expr) -> ((lambdatype_of_func typ, id), expr))
+          fields
+      in *)
       (* Check that all the required fields are defined *)
       List.iter
         (fun ((typ, id), arch) ->
@@ -151,6 +168,9 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
                 if id = i then
                   let _ =
                     try
+                      (* match_types t
+                        (typ |> lambdatype_of_func
+                        |> add_parameter_to_func void_pointer) *)
                       match_types t typ
                       (* TODO: Check very carefully: Should it be t typ or typ t? *)
                     with Type_match_error msg -> raise_type_error e msg
@@ -176,6 +196,7 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
       in
       let constr_params =
         match constr with
+        | Some (((_, Funtype (params, ret), _), _), _)
         | Some (((_, Lambdatype (params, ret, _), _), _), _) ->
             (* Check that constructor returns void *)
             let _ =
@@ -193,9 +214,9 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
                   with Type_match_error msg -> raise_type_error tldf msg
                 in
                 params
-            | _ -> raise_type_error expr "constructor should be a function 1")
+            | _ -> raise_type_error expr "constructor should be a lambda 1")
         | Some (_, def) ->
-            raise_type_error def "constructor should be a function 2"
+            raise_type_error def "constructor should be a lambda 2"
             (* This error should go on the type, not on the definition. But for now, types are not annotated *)
         | None -> []
       in
@@ -458,6 +479,10 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
       (annot_copy expr (PreUnop (op, expr_res)), res_type)
   | Lambda (retype, params, body, _) ->
       push_symbol_table ();
+      (* TODO: Function parameters need to be lambdas *)
+      (* let params =
+        List.map (fun (t, id) -> (lambdatype_of_func t, id)) params
+      in *)
       List.iter
         (fun (typ, id) ->
           try bind_var id typ
@@ -686,7 +711,7 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
           in
           bind_type_if_needed arraytype;
           (annot_copy expr (Array (xexpr :: exprs_e)), arraytype))
-  | Cast (t, e) -> (annot_copy expr (Cast (t, fst (typecheck_expr e))), t)
+  | Cast (t, e) -> (annot_copy expr (Cast (t, fst (typecheck_expr e))), snd t)
 
 and typecheck_expr_list (exprs : expr_a list) (types : perktype list) :
     (expr_a * perktype) list =
@@ -793,18 +818,19 @@ and match_types ?(coalesce : bool = false) (expected : perktype)
               (match_type_list t1
                  (List.map (fun t -> (annotate_dummy (Int (-1)), t)) t2)),
             [] )
-      | Funtype (params1, ret1), Lambdatype (params2, ret2, _) ->
+      | Lambdatype (params1, ret1, _), Funtype (params2, ret2) ->
           let param_types = List.map2 match_types_aux params1 params2 in
           let ret_type = match_types_aux ret1 ret2 in
           ([], Lambdatype (param_types, ret_type, []), [])
+      | Pointertype (_, Basetype "void", _), Modeltype (_, _, _, _) -> actual
       | _ ->
           raise
             (Type_match_error
                (Printf.sprintf "Type mismatch: expected %s,\ngot %s instead"
-                  (* (Codegen.codegen_type ~expand:true expected)
-                     (Codegen.codegen_type ~expand:true actual))) *)
-                  (show_perktype expected)
-                  (show_perktype actual)))
+                  (Codegen.codegen_type ~expand:true expected)
+                  (Codegen.codegen_type ~expand:true actual)))
+    (* (show_perktype expected)
+                  (show_perktype actual))) *)
   in
   match (coalesce, expected, actual) with
   | _, (_, Optiontype t, _), (_, Optiontype s, _) ->
@@ -848,91 +874,4 @@ and autocast (expr : expr_a) (typ : perktype) (expected : perktype option) :
     expr_a * perktype =
   match expected with
   | None -> (expr, typ)
-  | Some t -> (annot_copy expr (Cast (t, expr)), t)
-
-(* returns pair of lists: FIRST LIST IS FREE VARS, SECOND LIST IS BOUND *)
-and free_variables_command (cmd : command_a) : perkident list * perkident list =
-  let free_variables_command_aux (cmd : command_a) :
-      perkident list * perkident list =
-    match ( $ ) cmd with
-    | InlineCCmd _ -> ([], [])
-    | Block c ->
-        let free, _ = free_variables_command c in
-        (free, [])
-    | Assign (e1, e2, _, _) ->
-        let free_e1, bound_e1 = free_variables_expr e1 in
-        let free_e2, bound_e2 = free_variables_expr e2 in
-        (free_e1 @ free_e2, bound_e1 @ bound_e2)
-    | Seq (c1, c2) ->
-        let free_c1, bound_c1 = free_variables_command c1 in
-        let free_c2, bound_c2 = free_variables_command c2 in
-        (list_minus (free_c1 @ free_c2) bound_c1, bound_c1 @ bound_c2)
-    | IfThenElse (e1, c1, c2) ->
-        let free_e1, _ = free_variables_expr e1 in
-        let free_c1, _ = free_variables_command c1 in
-        let free_c2, _ = free_variables_command c2 in
-        (free_e1 @ free_c1 @ free_c2, [])
-    | Whiledo (e1, c1) | Dowhile (e1, c1) ->
-        let free_e1, _ = free_variables_expr e1 in
-        let free_c1, _ = free_variables_command c1 in
-        (free_e1 @ free_c1, [])
-    | For (c1, e1, c2, c3) ->
-        (* ES THES FOCKEN REIGHT!?!?!?!? *)
-        (* for(a; b; {int a; int b}) *)
-        let free_e1, _ = free_variables_expr e1 in
-        let free_c1, bound_c1 = free_variables_command c1 in
-        let free_c2, bound_c2 = free_variables_command c2 in
-        let free_c3, _ = free_variables_command c3 in
-        ( free_c1 @ free_e1
-          @ list_minus free_c2 bound_c1
-          @ list_minus free_c3 (bound_c1 @ bound_c2),
-          bound_c1 @ bound_c2 )
-    | Expr e1 -> free_variables_expr e1
-    | Switch _ -> failwith "yomumsaho"
-    | Skip -> ([], [])
-    | Banish id -> ([ id ], []) (* TODO: needda somme morre thinkin' *)
-    | Return e1 -> free_variables_expr e1
-    | DefCmd (((_, id), def), _) ->
-        let free, _ = free_variables_expr def in
-        (free, [ id ])
-  in
-  let out_free, out_bound = free_variables_command_aux cmd in
-  ( List.sort_uniq String.compare out_free,
-    List.sort_uniq String.compare out_bound )
-
-and free_variables_expr (e : expr_a) : perkident list * perkident list =
-  let free_variables_expr (e : expr_a) : perkident list * perkident list =
-    ( (match ( $ ) e with
-      | Nothing _ | Int _ | Float _ | Char _ | String _ -> []
-      | Something (e1, _) -> free_variables_expr e1 |> fst
-      | Pointer e1 -> free_variables_expr e1 |> fst
-      | Var id -> [ id ]
-      | Apply (e1, el, _) ->
-          fst (free_variables_expr e1)
-          @ List.flatten (List.map (fun x -> free_variables_expr x |> fst) el)
-      | Binop (_, e1, e2) ->
-          fst (free_variables_expr e1) @ fst (free_variables_expr e2)
-      | PreUnop (_, e1) | PostUnop (_, e1) -> fst (free_variables_expr e1)
-      | Lambda (_, params, body, _) ->
-          list_minus (fst (free_variables_command body)) (List.map snd params)
-      | Parenthesised e1 -> fst (free_variables_expr e1)
-      | Subscript (e1, e2) ->
-          fst (free_variables_expr e1) @ fst (free_variables_expr e2)
-      | TupleSubscript (e1, _) -> fst (free_variables_expr e1)
-      | Summon (_, el) ->
-          List.flatten (List.map (fun x -> fst (free_variables_expr x)) el)
-      | Access (e1, _id, _) -> fst (free_variables_expr e1)
-      | Tuple (el, _) | Array el ->
-          List.flatten (List.map (fun x -> fst (free_variables_expr x)) el)
-      | As (id, _) -> [ id ]
-      | Cast (_, e1) -> fst (free_variables_expr e1)),
-      [] )
-  in
-  let out_free, out_bound = free_variables_expr e in
-  ( list_minus
-      (List.sort_uniq String.compare out_free)
-      ("self" :: get_all_global_identifiers ()),
-    List.sort_uniq String.compare out_bound )
-
-and list_minus (l1 : 'a list) (l2 : 'a list) : 'a list =
-  List.filter (fun x -> not (List.mem x l2)) l1
+  | Some t -> (annot_copy expr (Cast ((typ, t), expr)), t)
