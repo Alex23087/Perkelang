@@ -11,38 +11,38 @@ typedef void (*l_void_ptr_to_void_r)(void*);
 typedef void* void_ptr;
 typedef int (*l__to_int_r)();
 typedef char* char_ptr;
-typedef struct env_ {void* _0; void* _1; void* _2; void* _3; void* _4;} env_;
-typedef struct l_void_ptr_to_void_r_env_ {
-    struct env_ env;
-    l_void_ptr_to_void_r func;
-} l_void_ptr_to_void_r_env_;
-struct l_void_ptr_to_void_r_env_ __perkelang_capture_dummy_l_void_ptr_to_void_r_env_;
-typedef void (*l_void_ptr__l_void_ptr_to_void_r_env__to_void_r)(void*, l_void_ptr_to_void_r_env_);
 
-typedef struct l_void_ptr__l_void_ptr_to_void_r_env__to_void_r_env_ {
-    struct env_ env;
-    l_void_ptr__l_void_ptr_to_void_r_env__to_void_r func;
-} l_void_ptr__l_void_ptr_to_void_r_env__to_void_r_env_;
-struct l_void_ptr__l_void_ptr_to_void_r_env__to_void_r_env_ __perkelang_capture_dummy_l_void_ptr__l_void_ptr_to_void_r_env__to_void_r_env_;
+typedef struct l_void_ptr_to_void_r_ {
+    struct  env;
+    l_void_ptr_to_void_r func;
+} l_void_ptr_to_void_r_;
+struct l_void_ptr_to_void_r_ __perkelang_capture_dummy_l_void_ptr_to_void_r_;
+typedef void (*l_void_ptr__l_void_ptr_to_void_r__to_void_r)(void*, l_void_ptr_to_void_r_);
+
+typedef struct l_void_ptr__l_void_ptr_to_void_r__to_void_r_ {
+    struct  env;
+    l_void_ptr__l_void_ptr_to_void_r__to_void_r func;
+} l_void_ptr__l_void_ptr_to_void_r__to_void_r_;
+struct l_void_ptr__l_void_ptr_to_void_r__to_void_r_ __perkelang_capture_dummy_l_void_ptr__l_void_ptr_to_void_r__to_void_r_;
 
 int main ();
 static void __perkelang_lambda_1 (void*);
-static void __perkelang_lambda_0 (void*, l_void_ptr_to_void_r_env_);
+static void __perkelang_lambda_0 (void*, l_void_ptr_to_void_r_);
 
 int main() {
     int x = 10;
-    l_void_ptr__l_void_ptr_to_void_r_env__to_void_r_env_ draw = {{}, (l_void_ptr__l_void_ptr_to_void_r_env__to_void_r) __perkelang_lambda_0};
-    CALL_LAMBDA(draw, l_void_ptr__l_void_ptr_to_void_r_env__to_void_r_env_, ((l_void_ptr_to_void_r_env_){{(void*)x}, (l_void_ptr_to_void_r) __perkelang_lambda_1}));
+    l_void_ptr__l_void_ptr_to_void_r__to_void_r_ draw = {{}, (l_void_ptr__l_void_ptr_to_void_r__to_void_r) __perkelang_lambda_0};
+    CALL_LAMBDA(draw, l_void_ptr__l_void_ptr_to_void_r__to_void_r_, ((l_void_ptr_to_void_r_){{(void*)x}, (l_void_ptr_to_void_r) __perkelang_lambda_1}));
     return 0;
 }
 
 static void __perkelang_lambda_1(void* __env) {
-    env_* _env = (env_*) __env;
+    * _env = (*) __env;
     int x = (int)_env->_0;
     printf("x = %d\n", x);
 }
 
-static void __perkelang_lambda_0(void* __env, l_void_ptr_to_void_r_env_ f) {
+static void __perkelang_lambda_0(void* __env, l_void_ptr_to_void_r_ f) {
     printf("Panano\n");
-    CALL_LAMBDA0(f, l_void_ptr_to_void_r_env_);
+    CALL_LAMBDA0(f, l_void_ptr_to_void_r_);
 }
