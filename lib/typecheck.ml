@@ -4,14 +4,17 @@ open Utils
 open Type_symbol_table
 open Var_symbol_table
 open Free_variables
+open Lambda_env_AI_unifier
 
 let rec typecheck_program (ast : topleveldef_a list) : topleveldef_a list =
   push_symbol_table ();
+  __lambda_type_symbol_table := type_symbol_table;
   let res = List.map typecheck_topleveldef ast in
   let res = List.map typecheck_deferred_function res in
   (* Will it do it in the right order?? *)
   (* print_symbol_table (); *)
   (* print_type_symbol_table (); *)
+  (* lambda_env_typecheck_complete (); *)
   res
 
 and typecheck_deferred_function (tldf : topleveldef_a) : topleveldef_a =
@@ -62,6 +65,7 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
         bind_type_if_needed typ';
         bind_type_if_needed typ'';
         bind_var id typ'';
+        lambda_env_unify typ'' expr_type;
         annot_copy tldf (Def (((typ'', id), expr_res), deftype))
   | Fundef (ret_type, id, params, body) ->
       if id = "self" then raise_type_error tldf "Identifier self is reserved"
@@ -246,6 +250,7 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
               with Type_match_error msg -> raise_type_error expr msg
             in
             bind_var id typ';
+            lambda_env_unify typ expr_type;
             ((typ', id), expr_res))
           fields
       in
@@ -302,6 +307,7 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
            (match deftype with
            | Some deftype -> show_perktype deftype
            | None -> "None"); *)
+        lambda_env_unify typ'' expr_type;
         annot_copy cmd (DefCmd (((typ'', id), expr_res), deftype))
   | Assign (lhs, rhs, _, _) ->
       let lhs_res, lhs_type = typecheck_expr lhs in
@@ -325,6 +331,7 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
          (show_perktype lhs_type) (show_perktype rhs_type)
          (match acctype with Some t -> show_perktype t | None -> "None")
          (match rasstype with Some t -> show_perktype t | None -> "None"); *)
+      lambda_env_unify lhs_type rhs_type;
       annot_copy cmd (Assign (lhs_res, rhs_res, acctype, rasstype))
   | Seq (c1, c2) ->
       let c1_res = typecheck_command ~retype c1 in
@@ -462,6 +469,7 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
         try match_type_list fun_param_types param_rets
         with Type_match_error msg -> raise_type_error expr msg
       in
+      lambda_env_unify_lists fun_param_types _param_types;
       let param_rets =
         List.map2
           (fun (e, t1) t2 -> fill_nothing e t1 t2)
@@ -520,6 +528,7 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
           [] )
       in
       pop_symbol_table ();
+      lambda_env_bind lamtype free_vars;
       bind_type_if_needed lamtype;
       autocast
         (annot_copy expr (Lambda (retype, params, body_res, free_vars)))
@@ -861,15 +870,18 @@ and match_types ?(coalesce : bool = false) (expected : perktype)
           let param_types = List.map2 match_types_aux params1 params2 in
           let ret_type = match_types_aux ret1 ret2 in
           ([], Lambdatype (param_types, ret_type, []), [])
-      | Lambdatype (params1, ret1, free1), Lambdatype (params2, ret2, free2)
-        when List.equal
+      | Lambdatype (params1, ret1, free1), Lambdatype (params2, ret2, _free2)
+      (* when List.equal
                (* For now, two lambdas have to be capturing the same values *)
                (fun (typ1, id1) (typ2, id2) ->
                  id1 = id2 && equal_perktype typ1 typ2)
-               free1 free2 ->
+               free1 free2 *)
+        ->
           let param_types = List.map2 match_types_aux params1 params2 in
           let ret_type = match_types_aux ret1 ret2 in
-          ([], Lambdatype (param_types, ret_type, free1), [])
+          let lamtype = ([], Lambdatype (param_types, ret_type, free1), []) in
+          lambda_env_bind lamtype free1;
+          lamtype
       | Pointertype (_, Basetype "void", _), Modeltype (_, _, _, _) -> actual
       | _ ->
           raise
@@ -922,4 +934,12 @@ and autocast (expr : expr_a) (typ : perktype) (expected : perktype option) :
     expr_a * perktype =
   match expected with
   | None -> (expr, typ)
-  | Some t -> (annot_copy expr (Cast ((typ, t), expr)), t)
+  | Some t ->
+      (annot_copy expr (Cast ((typ, t), expr)), copy_over_free_vars typ t)
+
+and copy_over_free_vars (from_t : perktype) (to_t : perktype) =
+  match (from_t, to_t) with
+  | ( (_, Lambdatype (_params1, _ret1, free1), _),
+      (a, Lambdatype (params2, ret2, _free2), q) ) ->
+      (a, Lambdatype (params2, ret2, free1), q)
+  | _ -> to_t

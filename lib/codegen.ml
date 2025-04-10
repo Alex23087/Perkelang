@@ -2,6 +2,7 @@ open Ast
 open Errors
 open Utils
 open Type_symbol_table
+open Lambda_env_AI_unifier
 
 exception TypeError of string
 
@@ -72,11 +73,18 @@ let rec codegen_lambda (e : expr_a) : string =
                      (fun (t, id) -> Printf.sprintf "%s %s" (codegen_type t) id)
                      args)
           in
+          let lambdatype =
+            ( [ Static ],
+              Lambdatype
+                (List.map (fun (t, _) -> t) args, retype, free_variables),
+              [] )
+          in
           let env_bind_str =
             if List.length free_variables = 0 then "\n"
             else
               "\n"
-              ^ (let envtype = type_descriptor_of_environment free_variables in
+              ^ ((* let envtype = type_descriptor_of_environment free_variables in *)
+                 let envtype = get_type_descriptor_for_partition lambdatype in
                  Printf.sprintf "    %s* _env = (%s*) __env;\n" envtype envtype)
               ^ String.concat ";\n"
                   (List.mapi
@@ -87,12 +95,6 @@ let rec codegen_lambda (e : expr_a) : string =
               ^ ";\n"
           in
           let body_str = codegen_command body 1 in
-          let lambdatype =
-            ( [ Static ],
-              Lambdatype
-                (List.map (fun (t, _) -> t) args, retype, free_variables),
-              [] )
-          in
           bind_function_type id (add_parameter_to_func void_pointer lambdatype);
           let type_descriptor =
             type_descriptor_of_perktype (func_of_lambda_void lambdatype)
@@ -117,6 +119,9 @@ and bind_function_type (ident : perkident) (typ : perktype) : unit =
   with Not_found -> Hashtbl.add fundecl_symbol_table ident typ
 
 and codegen_program (tldfs : topleveldef_a list) : string =
+  print_type_symbol_table ();
+  print_envs ();
+  lambda_env_print_partitions ();
   let s =
     say_here "codegen_program";
     filter_var_table ();
@@ -880,7 +885,9 @@ and generate_types () =
 
 and codegen_type_definition (t : perktype) : string =
   let key = type_descriptor_of_perktype t in
-  let _t, _code = Hashtbl.find type_symbol_table key in
+  let _t, _code =
+    try Hashtbl.find type_symbol_table key with Not_found -> failwith key
+  in
   match _code with
   (* Some types (e.g., Models, Archetypes) will have code already generated *)
   | Some c -> c
@@ -971,7 +978,7 @@ and codegen_type_definition (t : perktype) : string =
                 error, please file an issue at https://github.com/"
                (type_descriptor_of_perktype t)))
 
-and codegen_lambda_environment (_free_vars : perkvardesc list) : string * string
+(* and codegen_lambda_environment (_free_vars : perkvardesc list) : string * string
     =
   let free_vars = List.map swizzle !all_vars in
   let environment_type_desc = type_descriptor_of_environment free_vars in
@@ -992,16 +999,19 @@ and codegen_lambda_environment (_free_vars : perkvardesc list) : string * string
       in
       lambda_environments :=
         (environment_type_desc, environment_typedef) :: !lambda_environments;
-      (environment_type_desc, environment_typedef)
+      (environment_type_desc, environment_typedef) *)
 
 and codegen_lambda_capture (lamtype : perktype) : string =
   match lamtype with
-  | [], Lambdatype (_retype, _args, free_vars), [] -> (
+  | _, Lambdatype (_retype, _args, _free_vars), _ -> (
       let lambda_type_desc =
         type_descriptor_of_perktype (func_of_lambda_void lamtype)
       in
-      let environment_type_desc, environment_typedef =
+      (* let environment_type_desc, environment_typedef =
         codegen_lambda_environment free_vars
+      in *)
+      let environment_type_desc, environment_typedef =
+        (get_type_descriptor_for_partition lamtype, "")
       in
       let capture_type_desc = lambda_type_desc ^ "_" ^ environment_type_desc in
       let tmp_typedef =
