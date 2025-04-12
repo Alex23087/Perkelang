@@ -1,11 +1,8 @@
 open Ast
 open Utils
 
-let __lambda_type_symbol_table :
-    (perkident, perktype * string option * perkident list) Hashtbl.t ref =
-  ref (Hashtbl.create 0)
-
 let lambda_env_partition_table :
+    (* Maybe do expr instead of perktype, finer analysis 👍 *)
     (perktype_partial, int * perkvardesc list) Hashtbl.t =
   Hashtbl.create 10
 
@@ -37,15 +34,14 @@ let lambda_env_unify (t1 : perktype) (t2 : perktype) =
             lambda_env_partition_table;
           Hashtbl.iter
             (fun key value ->
-              Hashtbl.remove !__lambda_type_symbol_table key;
-              Hashtbl.add
-                !__lambda_type_symbol_table
+              Hashtbl.remove type_symbol_table key;
+              Hashtbl.add type_symbol_table
                 (Str.global_replace
                    (Str.regexp (Printf.sprintf "_env_%d" i1))
                    (Printf.sprintf "_env_%d" i2)
                    key)
                 value)
-            !__lambda_type_symbol_table
+            type_symbol_table
       | Some (i1, _l1), None ->
           Hashtbl.add lambda_env_partition_table (discard_type_aq t2) (i1, [])
       | None, Some (i2, _l2) ->

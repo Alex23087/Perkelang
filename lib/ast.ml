@@ -175,3 +175,7 @@ let filter_var_table () =
     List.fold_left
       (fun l (id, typ) -> if List.mem (id, typ) l then l else (id, typ) :: l)
       [] !all_vars
+
+let type_symbol_table :
+    (perkident, perktype * string option * perkident list) Hashtbl.t =
+  Hashtbl.create 10

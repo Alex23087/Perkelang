@@ -8,7 +8,6 @@ open Lambda_env_AI_unifier
 
 let rec typecheck_program (ast : topleveldef_a list) : topleveldef_a list =
   push_symbol_table ();
-  __lambda_type_symbol_table := type_symbol_table;
   let res = List.map typecheck_topleveldef ast in
   let res = List.map typecheck_deferred_function res in
   (* Will it do it in the right order?? *)
