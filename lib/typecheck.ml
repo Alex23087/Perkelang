@@ -727,6 +727,30 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
           bind_type_if_needed arraytype;
           (annot_copy expr (Array (xexpr :: exprs_e)), arraytype))
   | Cast (t, e) -> (annot_copy expr (Cast (t, fst (typecheck_expr e))), snd t)
+  | IfThenElseExpr (guard, then_e, else_e) ->
+      let guard_res, guard_type = typecheck_expr guard in
+      (match guard_type with
+      | _, Basetype "int", _ -> () (* TODO: Decide what TODO with booleans *)
+      | _ ->
+          raise_type_error expr
+            (Printf.sprintf
+               "If guard must be a boolean (or an integer, we are still a bit \
+                confused ok?!?), got %s"
+               (show_perktype guard_type)));
+      let then_e_res, then_e_type = typecheck_expr then_e in
+      let else_e_res, else_e_type = typecheck_expr else_e in
+      let res_type =
+        try match_types guard_type else_e_type
+        with Type_match_error msg -> raise_type_error expr msg
+      in
+      let then_e_res, _then_e_type =
+        fill_nothing then_e_res then_e_type res_type
+      in
+      let else_e_res, _else_e_type =
+        fill_nothing else_e_res else_e_type res_type
+      in
+      ( annot_copy expr (IfThenElseExpr (guard_res, then_e_res, else_e_res)),
+        res_type )
 
 and typecheck_expr_list (exprs : expr_a list) (types : perktype list) :
     (expr_a * perktype) list =

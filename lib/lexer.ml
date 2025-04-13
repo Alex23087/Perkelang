@@ -80,6 +80,7 @@ let rec token lexbuf =
   | "cast" -> Cast
   (* | "☠" | "forget" | "forgor" -> Forgor *)
   | "if" -> If
+  | "then" -> Then
   | "else" -> Else
   | "while" -> While
   | "do" -> Do

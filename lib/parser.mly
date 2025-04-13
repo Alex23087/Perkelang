@@ -7,7 +7,7 @@
 /* Tokens declarations */
 %token EOF
 %token Plus Eq Neq Lt Leq Gt Geq Minus Star Div Ampersand PlusPlus MinusMinus Dot Ellipsis Question Land Lor
-%token Fun Assign If Else While Do For
+%token Fun Assign If Then Else While Do For
 %token <int> Integer
 %token <float> Float
 %token <char> Character
@@ -151,7 +151,8 @@ expr:
   | id = Ident As tl = separated_nonempty_list (Plus, perktype)                                            { annotate_2_code $loc (Ast.As (id, tl)) }
   | LBracket RBracket                                                                                      { annotate_2_code $loc (Ast.Array [])}
   | LBracket l = separated_nonempty_list (Comma, expr) RBracket                                            { annotate_2_code $loc (Ast.Array l)}
-  | Cast LParen typ = perktype RParen e = expr                                                             { annotate_2_code $loc (Ast.Cast ((([],Ast.Infer,[]), typ), e)) }
+  | Cast LParen typ = perktype Comma e = expr RParen                                                       { annotate_2_code $loc (Ast.Cast ((([],Ast.Infer,[]), typ), e)) }
+  | If guard = expr Then e1 = expr Else e2 = expr                                                          { annotate_2_code $loc (Ast.IfThenElseExpr (guard, e1, e2)) }
 
   | error                                                                                                  { raise (ParseError("expression expected")) }
   | expr error                                                                                             { raise (ParseError("unexpected expression")) }

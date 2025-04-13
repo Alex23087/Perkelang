@@ -80,8 +80,8 @@ test: build
 		CURRENT=$$((CURRENT+1)) ;\
 		echo "[$$CURRENT/$$COUNT] Testing $$(basename "$${f%.*}")" ; \
 		EXPECTED="$${f%.*}.expected" ;\
-		RES=$$(_build/default/bin/perkc.exe "$$f" > /dev/null && gcc "$${f%.*}.c" -o "$$(dirname $$f)/a.out" && "$$(dirname $$f)/a.out") ; \
-		# rm -f "$$(dirname $$f)/a.out" ;\
+		RES=$$(_build/default/bin/perkc.exe "$$f" > /dev/null && gcc -Wno-int-to-pointer-cast -Wno-pointer-to-int-cast "$${f%.*}.c" -o "$$(dirname $$f)/a.out" && "$$(dirname $$f)/a.out") ; \
+		rm -f "$$(dirname $$f)/a.out" ;\
 		if [ $$? -eq 0 ]; then \
 			if [ -e "$$EXPECTED" ]; then \
 				echo "$$RES" | diff "$$EXPECTED" -;\

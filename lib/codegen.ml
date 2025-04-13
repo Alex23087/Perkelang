@@ -782,6 +782,9 @@ and codegen_expr (e : expr_a) : string =
           Printf.sprintf "((%s)%s)"
             (type_descriptor_of_perktype to_t)
             (codegen_expr e))
+  | IfThenElseExpr (guard, then_e, else_e) ->
+      Printf.sprintf "(%s ? %s : %s)" (codegen_expr guard) (codegen_expr then_e)
+        (codegen_expr else_e)
 
 (* struct {int is_empty; int value;} palle = {0,1}; *)
 

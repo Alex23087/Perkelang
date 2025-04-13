@@ -95,7 +95,7 @@
       "patterns": [
         {
           "name": "keyword.control.perkelang",
-          "match": "\\b(let|import|extern|archetype|model|fun|for|while|do|if|else|return|summon|banish)\\b"
+          "match": "\\b(let|import|extern|archetype|model|fun|for|while|do|if|then|else|return|summon|banish|cast)\\b"
         },
         {
           "name": "keyword.other.begin-c.perkelang",

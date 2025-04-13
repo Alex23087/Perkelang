@@ -130,6 +130,7 @@ and expr_t =
   | Array of expr_a list
   (* Cast ((from_type, to_type), expression)*)
   | Cast of (perktype * perktype) * expr_a
+  | IfThenElseExpr of expr_a * expr_a * expr_a
 [@@deriving show, eq]
 
 (* Syntax of the language *)
