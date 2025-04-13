@@ -1,0 +1,18 @@
+extern printf: (char*, ...) -> void
+
+archetype StringContainer {
+    str: char*
+}
+
+model Test: StringContainer {
+    let str: char* = "Hello, World!"
+}
+
+fun main(): void {
+    let test := summon Test();
+    let ctr := (test as StringContainer);
+    let str := ctr.str;
+    banish test;
+
+    printf(str)
+}

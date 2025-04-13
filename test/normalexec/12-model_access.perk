@@ -1,0 +1,13 @@
+extern printf: (char*, ...) -> void
+
+model Test {
+    let str: char* = "Hello, World!"
+}
+
+fun main(): void {
+    let test := summon Test();
+    let str := test.str;
+    banish test;
+
+    printf(str)
+}
