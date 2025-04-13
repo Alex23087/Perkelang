@@ -77,6 +77,7 @@ let rec token lexbuf =
   | "?" -> Question
   | "nothing" | "none" -> Nothing
   | "something" | "some" | "just" -> Something
+  | "cast" -> Cast
   (* | "☠" | "forget" | "forgor" -> Forgor *)
   | "if" -> If
   | "else" -> Else

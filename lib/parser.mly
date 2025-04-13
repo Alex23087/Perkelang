@@ -20,7 +20,7 @@
 %token Const Volatile Restrict
 %token <string> InlineC
 %token Import Open
-%token Archetype Model Summon Banish
+%token Archetype Model Summon Banish Cast
 %token Nothing Something
 
 /* Precedence and associativity specification */
@@ -150,6 +150,7 @@ expr:
   | id = Ident As tl = separated_nonempty_list (Plus, perktype)                                            { annotate_2_code $loc (Ast.As (id, tl)) }
   | LBracket RBracket                                                                                      { annotate_2_code $loc (Ast.Array [])}
   | LBracket l = separated_nonempty_list (Comma, expr) RBracket                                            { annotate_2_code $loc (Ast.Array l)}
+  | Cast LParen typ = perktype RParen e = expr                                                             { annotate_2_code $loc (Ast.Cast ((([],Ast.Infer,[]), typ), e)) }
 
   | error                                                                                                  { raise (ParseError("expression expected")) }
   | expr error                                                                                             { raise (ParseError("unexpected expression")) }

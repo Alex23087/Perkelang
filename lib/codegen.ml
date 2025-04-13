@@ -117,52 +117,53 @@ and bind_function_type (ident : perkident) (typ : perktype) : unit =
   with Not_found -> Hashtbl.add fundecl_symbol_table ident typ
 
 and codegen_program (tldfs : topleveldef_a list) : string =
-  say_here "codegen_program";
-  filter_var_table ();
-  List.iter
-    (fun (id, typ) ->
-      Printf.printf "%s: %s\n" id (type_descriptor_of_perktype typ))
-    !all_vars;
-  let body =
-    String.concat "\n"
-      (List.map
-         (fun tldf ->
-           let code = codegen_topleveldef tldf in
-           if String.length code = 0 then "" else Printf.sprintf "%s\n" code)
-         tldfs)
-    |> String.trim
-  in
-  (* Write includes *)
-  "#include <malloc.h>\n"
-  ^ String.concat "\n"
-      (List.map (fun lib -> Printf.sprintf "#include %s" lib) !import_list)
-  ^ "\n\n"
-  (* Write macros *)
-  ^ "#define CAST_LAMBDA(name, from_type, to_type, func_type) \
-     ((__perkelang_capture_dummy_##from_type = name, (to_type) \
-     {__perkelang_capture_dummy_##from_type.env, \
-     (func_type)__perkelang_capture_dummy_##from_type.func}))\n"
-  ^ "#define CALL_LAMBDA0(l, t) (__perkelang_capture_dummy_##t = l, \
-     __perkelang_capture_dummy_##t.func(&(__perkelang_capture_dummy_##t.env)))\n"
-  ^ "#define CALL_LAMBDA(l, t, ...) (__perkelang_capture_dummy_##t = l, \
-     __perkelang_capture_dummy_##t.func(&(__perkelang_capture_dummy_##t.env), \
-     __VA_ARGS__))\n" ^ "\n\n"
-  (* Write typedefs for functions*)
-  (* ^ Hashtbl.fold
+  let s =
+    say_here "codegen_program";
+    filter_var_table ();
+    (* List.iter
+      (fun (id, typ) ->
+        Printf.printf "%s: %s\n" id (type_descriptor_of_perktype typ))
+      !all_vars; *)
+    let body =
+      String.concat "\n"
+        (List.map
+           (fun tldf ->
+             let code = codegen_topleveldef tldf in
+             if String.length code = 0 then "" else Printf.sprintf "%s\n" code)
+           tldfs)
+      |> String.trim
+    in
+    (* Write includes *)
+    "#include <malloc.h>\n"
+    ^ String.concat "\n"
+        (List.map (fun lib -> Printf.sprintf "#include %s" lib) !import_list)
+    ^ "\n\n"
+    (* Write macros *)
+    ^ "#define CAST_LAMBDA(name, from_type, to_type, func_type) \
+       ((__perkelang_capture_dummy_##from_type = name, (to_type) \
+       {__perkelang_capture_dummy_##from_type.env, \
+       (func_type)__perkelang_capture_dummy_##from_type.func}))\n"
+    ^ "#define CALL_LAMBDA0(l, t) (__perkelang_capture_dummy_##t = l, \
+       __perkelang_capture_dummy_##t.func(&(__perkelang_capture_dummy_##t.env)))\n"
+    ^ "#define CALL_LAMBDA(l, t, ...) (__perkelang_capture_dummy_##t = l, \
+       __perkelang_capture_dummy_##t.func(&(__perkelang_capture_dummy_##t.env), \
+       __VA_ARGS__))\n" ^ "\n\n"
+    (* Write typedefs for functions*)
+    (* ^ Hashtbl.fold
          (fun _ v acc -> Printf.sprintf "%s%s;\n" acc (snd_3 v))
          function_type_hashmap ""
      ^ "\n" *)
-  (* Write typedefs for tuples *)
-  (* ^ Hashtbl.fold
+    (* Write typedefs for tuples *)
+    (* ^ Hashtbl.fold
       (fun _ v acc -> Printf.sprintf "%s%s;\n" acc v)
       tuple_hashmap "" *)
-  (* Write struct definitions *)
-  (* ^ String.concat "\n" (List.rev !struct_def_list)
+    (* Write struct definitions *)
+    (* ^ String.concat "\n" (List.rev !struct_def_list)
      ^ "\n\n" *)
-  ^ generate_types ()
-  ^ "\n"
-  (* Write environment typedefs *)
-  (* ^ (if List.length !lambda_environments = 0 then ""
+    ^ generate_types ()
+    ^ "\n"
+    (* Write environment typedefs *)
+    (* ^ (if List.length !lambda_environments = 0 then ""
         else
           "\n"
           ^ String.concat ";\n"
@@ -175,17 +176,24 @@ and codegen_program (tldfs : topleveldef_a list) : string =
           ^ String.concat ";\n"
               (List.map (fun (_name, typ) -> typ) !lambda_capture_dummies)
           ^ ";\n\n") *)
-  (* Write hoisted function signatures *)
-  ^ Hashtbl.fold
-      (fun id typ acc -> Printf.sprintf "%s%s;\n" acc (codegen_fundecl id typ))
-      fundecl_symbol_table ""
-  (* Write program code *)
-  ^ "\n"
-  ^ body ^ "\n"
-  (* Write lambdas *)
-  ^ Hashtbl.fold
-      (fun _ v acc -> Printf.sprintf "%s\n%s\n" acc (snd_4 v))
-      lambdas_hashmap ""
+    (* Write hoisted function signatures *)
+    ^ Hashtbl.fold
+        (fun id typ acc ->
+          Printf.sprintf "%s%s;\n" acc (codegen_fundecl id typ))
+        fundecl_symbol_table ""
+    (* Write program code *)
+    ^ "\n"
+    ^ body ^ "\n"
+    (* Write lambdas *)
+    ^ Hashtbl.fold
+        (fun _ v acc -> Printf.sprintf "%s\n%s\n" acc (snd_4 v))
+        lambdas_hashmap ""
+  in
+  (* Printf.printf "dependenciesoftype called: %d\nused: %d\nunused: %d\n"
+    !called_counter !used_counter !unused_counter;
+  Printf.printf "resolve_type called: %d\nused: %d\nunused: %d\n" !resolve_count
+    !resolve_hit !resolve_miss; *)
+  s
 
 and codegen_topleveldef (tldf : topleveldef_a) : string =
   (* try *)
@@ -455,7 +463,7 @@ and codegen_command (cmd : command_a) (indentation : int) : string =
       ^ (Printf.sprintf "%s = %s;"
            (match lass_type with
            | Some (_, ArchetypeSum _, _) | Some (_, ArcheType _, _) ->
-               Printf.sprintf "*(%s)" (codegen_expr l)
+               Printf.sprintf "%s" (codegen_expr l)
            | _ -> Printf.sprintf "%s" (codegen_expr l)))
           (match _rass_type with
           | Some (_, Optiontype _t, _) ->
@@ -701,7 +709,7 @@ and codegen_expr (e : expr_a) : string =
                 (type_descriptor_of_perktype t)
                 ide
           | Some _ | None ->
-              Printf.sprintf "*(%s.%s.%s)" (codegen_expr e1)
+              Printf.sprintf "(*(%s.%s.%s))" (codegen_expr e1)
                 (type_descriptor_of_perktype t)
                 ide)
       | None -> failwith "Impossible: no acctype for access")
@@ -826,12 +834,16 @@ and codegen_fundecl (id : perkident) (typ : perktype) : string =
 and generate_types () =
   let out = ref "" in
   let ft_list =
-    ref (Hashtbl.fold (fun k v acc -> (k, v) :: acc) type_symbol_table [])
+    ref
+      (Hashtbl.fold
+         (fun k (typ, code) acc ->
+           (k, (typ, code, dependencies_of_type typ)) :: acc)
+         type_symbol_table [])
   in
-  let sortfun (_, (_, _, d_a)) (_, (_, _, d_b)) =
+  let sort_based_on_deps_count (_, (_, _, d_a)) (_, (_, _, d_b)) =
     compare (List.length d_a) (List.length d_b)
   in
-  ft_list := List.sort sortfun !ft_list;
+  ft_list := List.sort sort_based_on_deps_count !ft_list;
   (* List.iter
     (fun (id, (_, _, deps)) ->
       Printf.printf "Type: %s, Dependencies: [%s]\n" id
@@ -850,7 +862,7 @@ and generate_types () =
     ft_list := List.tl !ft_list;
     (* Remove dzpendency from other elements *)
     ft_list :=
-      List.sort sortfun
+      List.sort sort_based_on_deps_count
         (List.map
            (fun (_i, (_typ, _code, _deps)) ->
              (_i, (_typ, _code, List.filter (fun id -> id <> _id) _deps)))
@@ -863,7 +875,7 @@ and generate_types () =
 
 and codegen_type_definition (t : perktype) : string =
   let key = type_descriptor_of_perktype t in
-  let _t, _code, _deps = Hashtbl.find type_symbol_table key in
+  let _t, _code = Hashtbl.find type_symbol_table key in
   match _code with
   (* Some types (e.g., Models, Archetypes) will have code already generated *)
   | Some c -> c
@@ -883,7 +895,7 @@ and codegen_type_definition (t : perktype) : string =
                  ^ ";")
               type_str
           in
-          Hashtbl.replace type_symbol_table key (_t, Some compiled, _deps);
+          Hashtbl.replace type_symbol_table key (_t, Some compiled);
           compiled
       | _, Optiontype u, _ ->
           let u = resolve_type u in
@@ -895,7 +907,7 @@ and codegen_type_definition (t : perktype) : string =
               | _ -> type_descriptor_of_perktype u)
               key
           in
-          Hashtbl.replace type_symbol_table key (_t, Some compiled, _deps);
+          Hashtbl.replace type_symbol_table key (_t, Some compiled);
           compiled
       | _, Funtype (args, ret), _ ->
           let type_str = type_descriptor_of_perktype t in
@@ -907,7 +919,7 @@ and codegen_type_definition (t : perktype) : string =
                   (List.map (fun t -> codegen_type t ~expand:true) args)
               ^ ");")
           in
-          Hashtbl.replace type_symbol_table key (t, Some typedef_str, _deps);
+          Hashtbl.replace type_symbol_table key (t, Some typedef_str);
           (* Hashtbl.add function_type_hashmap t (type_str, typedef_str, expanded_str); *)
           typedef_str
       | _, Pointertype t, _ ->
@@ -929,7 +941,7 @@ and codegen_type_definition (t : perktype) : string =
               (type_descriptor_of_perktype t)
               (type_descriptor_of_perktype t)
           in
-          Hashtbl.replace type_symbol_table key (_t, Some compiled, _deps);
+          Hashtbl.replace type_symbol_table key (_t, Some compiled);
           compiled
       | _, Arraytype (at, n), _ ->
           let compiled =
@@ -943,7 +955,7 @@ and codegen_type_definition (t : perktype) : string =
                   (type_descriptor_of_perktype at)
                   key
           in
-          Hashtbl.replace type_symbol_table key (_t, Some compiled, _deps);
+          Hashtbl.replace type_symbol_table key (_t, Some compiled);
           compiled
       | _, Lambdatype _, _ -> codegen_lambda_capture t
       | _ ->
