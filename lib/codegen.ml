@@ -531,7 +531,9 @@ and codegen_command (cmd : command_a) (indentation : int) : string =
       (* TODO: Automatically banish children *)
       Printf.sprintf "%sfree(%s);\n%s%s = NULL;" indent_string name
         indent_string name
-  | Return e -> indent_string ^ Printf.sprintf "return %s;" (codegen_expr e)
+  | Return None -> indent_string ^ Printf.sprintf "return;"
+  | Return (Some e) ->
+      indent_string ^ Printf.sprintf "return %s;" (codegen_expr e)
 
 and codegen_def (t : perkvardesc) (e : expr_a) (deftype : perktype option) :
     string =

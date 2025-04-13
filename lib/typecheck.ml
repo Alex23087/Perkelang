@@ -403,15 +403,25 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
           raise_syntax_error cmd
             (Printf.sprintf "Variable %s is not a model" id));
       cmd
-  | Return e ->
+  | Return None -> (
+      match retype with
+      | Some (_, Basetype "void", _) | None -> cmd
+      | Some t ->
+          raise_type_error cmd
+            (Printf.sprintf
+               "This return is supposed to return a value of type %s, but it's \
+                empty"
+               (show_perktype t)))
+  | Return (Some e) ->
       let e_res, e_type = typecheck_expr e in
       (match retype with
       | Some t ->
           ignore
             (try match_types t e_type
              with Type_match_error msg -> raise_type_error cmd msg)
-      | None -> ());
-      annot_copy cmd (Return e_res)
+      | None ->
+          raise_type_error cmd "This return is not supposed to return any value");
+      annot_copy cmd (Return (Some e_res))
 
 and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
     expr_a * perktype =

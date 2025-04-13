@@ -43,7 +43,8 @@ let rec free_variables_command (cmd : command_a) :
     | Switch _ -> failwith "yomumsaho"
     | Skip -> ([], [])
     | Banish id -> ([ id ], []) (* TODO: needda somme morre thinkin' *)
-    | Return e1 -> free_variables_expr e1
+    | Return None -> ([], [])
+    | Return (Some e1) -> free_variables_expr e1
     | DefCmd (((_, id), def), _) ->
         let free, _ = free_variables_expr def in
         (free, [ id ])

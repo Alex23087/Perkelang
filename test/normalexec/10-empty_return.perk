@@ -1,0 +1,8 @@
+fun test(): void {
+    return;
+}
+
+fun main(): int {
+    test();
+    return 0;
+}

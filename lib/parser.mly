@@ -94,7 +94,8 @@ command:
   | c1 = command Semicolon c2 = command                                                                    { annotate_2_code $loc (Ast.Seq (c1, c2)) }
   | c1 = command Semicolon                                                                                 { c1 }
   | Skip                                                                                                   { annotate_2_code $loc (Ast.Skip) }
-  | Return e = expr                                                                                        { annotate_2_code $loc (Ast.Return (e)) }
+  | Return                                                                                                 { annotate_2_code $loc (Ast.Return (None)) }
+  | Return e = expr                                                                                        { annotate_2_code $loc (Ast.Return (Some e)) }
   | Banish i = Ident                                                                                       { annotate_2_code $loc (Banish i) }
 
 

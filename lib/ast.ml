@@ -147,7 +147,7 @@ and command_t =
   | Switch of expr_a * (expr_a * command_a) list
   | Skip
   | Banish of perkident
-  | Return of expr_a
+  | Return of expr_a option
 [@@deriving show, eq]
 
 and topleveldef_t =
