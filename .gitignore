@@ -4,6 +4,7 @@ test/*.ast
 test/test.c
 
 test/normalexec/**/*.c
+test/normalexec/**/*.out
 
 perkelang-vscode-lsp/node_modules
 perkelang-vscode-lsp/out

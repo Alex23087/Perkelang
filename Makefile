@@ -51,9 +51,18 @@ debug_run:
 	# gcc -o test/normalexec/09.capture_list_overapprox.out test/normalexec/09.capture_list_overapprox.c
 	# ./test/normalexec/09.capture_list_overapprox.out
 
-	# OCAMLRUNPARAM=b ./_build/default/bin/perkc.exe ../super_perkio/src/main.perk
-	# gcc -o ../super_perkio/out/super_perkio ../super_perkio/src/main.c -lSDL2
-	# ../super_perkio/out/super_perkio
+	# OCAMLRUNPARAM=b ./_build/default/bin/perkc.exe test/normalexec/08-drawable_list.perk
+	# gcc -o test/normalexec/08-drawable_list.out test/normalexec/08-drawable_list.c
+	# ./test/normalexec/08-drawable_list.out
+	# rm ./test/normalexec/08-drawable_list.out
+
+
+.PHONY: perkio
+perkio:
+	opam exec -- dune build --profile=dev
+	OCAMLRUNPARAM=b ./_build/default/bin/perkc.exe ../super_perkio/src/main.perk
+	gcc -o ../super_perkio/out/super_perkio ../super_perkio/src/main.c -lSDL2
+	../super_perkio/out/super_perkio	
 
 .PHONY: extensions
 extensions:

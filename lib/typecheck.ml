@@ -104,10 +104,7 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
             let decls =
               List.map (fun (typ, id) -> (typ |> lambdatype_of_func, id)) decls
             in
-            List.iter bind_type_if_needed
-              (List.map
-                 (fun d -> d |> fst |> add_parameter_to_func void_pointer)
-                 decls);
+            List.iter bind_type_if_needed (List.map fst decls);
             bind_type_if_needed ([], ArcheType (name, decls), []);
             annot_copy tldf (Archetype (name, decls)))
   | Model (ident, archetypes, fields) ->
@@ -208,7 +205,8 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
             (* Check that constructor returns void *)
             let _ =
               try match_types ([], Basetype "void", []) ret
-              with Type_match_error msg -> raise_type_error tldf msg
+              with Type_match_error _msg ->
+                raise_type_error tldf "constructor should return void"
             in
             params
         | Some (((_, Infer, _), _), expr) -> (
@@ -249,7 +247,7 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
               with Type_match_error msg -> raise_type_error expr msg
             in
             bind_var id typ';
-            lambda_env_unify typ expr_type;
+            lambda_env_unify typ typ';
             ((typ', id), expr_res))
           fields
       in
@@ -262,8 +260,7 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
       in
       rebind_type (type_descriptor_of_perktype modeltype) modeltype;
       List.iter
-        (fun ((typ, _id), _expr) ->
-          typ |> add_parameter_to_func modeltype |> bind_type_if_needed)
+        (fun ((typ, _id), _expr) -> typ |> bind_type_if_needed)
         fields_res;
       annot_copy tldf (Model (ident, archetypes, fields_res))
 

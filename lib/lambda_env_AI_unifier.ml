@@ -27,8 +27,8 @@ let lambda_env_bind (t : perktype) (l : perkvardesc list) =
           let id = !lambda_env_counter in
           Hashtbl.add lambda_env_partition_table (discard_type_aq t) (id, l);
           Hashtbl.add partition_table id id;
-          incr lambda_env_counter;
-          Printf.printf "Binding type %s to ID %d\n" (show_perktype t) id)
+          incr lambda_env_counter
+          (* Printf.printf "Binding type %s to ID %d\n" (show_perktype t) id *))
   | _ -> ()
 
 let rec lambda_env_bind_rec (t : perktype) (l : perkvardesc list) =
@@ -50,12 +50,20 @@ let lambda_env_unify (t1 : perktype) (t2 : perktype) =
             (show_perktype t2) *)
           ()
       | Some (i1, _l1), Some (i2, _l2) ->
-          Printf.printf "Unifying lambda types with IDs %d and %d\n" i1 i2;
+          (* Printf.printf "Unifying lambda types with IDs %d and %d\n" i1 i2; *)
           Hashtbl.replace partition_table i1 i2
       | Some (i1, _l1), None ->
-          Hashtbl.add lambda_env_partition_table (discard_type_aq t2) (i1, [])
+          (* Printf.printf "Unifying lambda types with IDs %d: %s\n" i1
+            (show_perktype t1); *)
+          Hashtbl.add lambda_env_partition_table
+            (t2 |> unresolve_type |> discard_type_aq)
+            (i1, [])
       | None, Some (i2, _l2) ->
-          Hashtbl.add lambda_env_partition_table (discard_type_aq t1) (i2, [])
+          (* Printf.printf "Unifying lambda types with IDs %d: %s\n" i2
+            (show_perktype t2); *)
+          Hashtbl.add lambda_env_partition_table
+            (t1 |> unresolve_type |> discard_type_aq)
+            (i2, [])
       | _ ->
           failwith
             (Printf.sprintf "Unification failed: types are not bound: %s %s"
