@@ -527,7 +527,7 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
           [] )
       in
       pop_symbol_table ();
-      lambda_env_bind lamtype free_vars;
+      lambda_env_bind_rec lamtype free_vars;
       bind_type_if_needed lamtype;
       autocast
         (annot_copy expr (Lambda (retype, params, body_res, free_vars)))
@@ -800,7 +800,7 @@ and match_types ?(coalesce : bool = false) (expected : perktype)
       try
         type_descriptor_of_perktype expected
         = type_descriptor_of_perktype actual
-      with Not_inferred _ -> false
+      with Not_inferred _ | Unbound_lambda_partition _ -> false
     in
     if equal then actual
     else
@@ -878,8 +878,8 @@ and match_types ?(coalesce : bool = false) (expected : perktype)
         ->
           let param_types = List.map2 match_types_aux params1 params2 in
           let ret_type = match_types_aux ret1 ret2 in
-          let lamtype = ([], Lambdatype (param_types, ret_type, free1), []) in
-          lambda_env_bind lamtype free1;
+          let lamtype = ([], Lambdatype (param_types, ret_type, _free2), []) in
+          lambda_env_bind_rec lamtype free1;
           lamtype
       | Pointertype (_, Basetype "void", _), Modeltype (_, _, _, _) -> actual
       | _ ->

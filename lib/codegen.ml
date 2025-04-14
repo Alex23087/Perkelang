@@ -89,8 +89,8 @@ let rec codegen_lambda (e : expr_a) : string =
               ^ String.concat ";\n"
                   (List.mapi
                      (fun i (t, id) ->
-                       Printf.sprintf "    %s %s = (%s)_env->_%d"
-                         (codegen_type t) id (codegen_type t) i)
+                       Printf.sprintf "    %s %s = _env->_%d" (codegen_type t)
+                         id i)
                      free_variables)
               ^ ";\n"
           in
@@ -109,7 +109,7 @@ let rec codegen_lambda (e : expr_a) : string =
     in
     Hashtbl.add lambdas_hashmap e (id, compiled, free_variables, type_descriptor);
     Printf.sprintf "{{%s}, (%s) %s}"
-      (String.concat ", " (List.map (fun s -> "(void*)" ^ s) free_variables))
+      (String.concat ", " free_variables)
       type_descriptor id
 
 and bind_function_type (ident : perkident) (typ : perktype) : unit =
@@ -886,7 +886,10 @@ and generate_types () =
 and codegen_type_definition (t : perktype) : string =
   let key = type_descriptor_of_perktype t in
   let _t, _code =
-    try Hashtbl.find type_symbol_table key with Not_found -> failwith key
+    try Hashtbl.find type_symbol_table key
+    with Not_found ->
+      print_type_symbol_table ();
+      failwith key
   in
   match _code with
   (* Some types (e.g., Models, Archetypes) will have code already generated *)
@@ -978,28 +981,32 @@ and codegen_type_definition (t : perktype) : string =
                 error, please file an issue at https://github.com/"
                (type_descriptor_of_perktype t)))
 
-(* and codegen_lambda_environment (_free_vars : perkvardesc list) : string * string
-    =
-  let free_vars = List.map swizzle !all_vars in
-  let environment_type_desc = type_descriptor_of_environment free_vars in
+and codegen_lambda_environment (lamtype : perktype) : string * string =
+  (* let free_vars = List.map swizzle !all_vars in *)
+  let environment_type_desc = get_type_descriptor_for_partition lamtype in
   let tmp_typedef =
     List.find_opt (fun (t, _) -> t = environment_type_desc) !lambda_environments
   in
   match tmp_typedef with
   | Some typedef -> (fst typedef, "")
   | None ->
+      let p1, p2 = lambda_env_get_partition_bind lamtype in
       let environment_typedef =
-        Printf.sprintf "typedef struct %s {%s;} %s;" environment_type_desc
-          (String.concat "; "
-             (List.mapi
-                (fun i (_typ, _id) -> Printf.sprintf "void* _%d" i)
-                  (* Printf.sprintf "%s _%d" (type_descriptor_of_perktype typ) i) *)
-                free_vars))
-          environment_type_desc
+        if p1 = p2 then
+          let free_vars = lambda_env_get_free_vars_by_lambda lamtype in
+          Printf.sprintf "typedef struct %s {%s;} %s;" environment_type_desc
+            (String.concat "; "
+               (List.mapi
+                  (fun i (typ, _id) ->
+                    (* Printf.sprintf "void* _%d" i) *)
+                    Printf.sprintf "%s _%d" (type_descriptor_of_perktype typ) i)
+                  free_vars))
+            environment_type_desc
+        else Printf.sprintf "typedef _env_%d %s;" p2 environment_type_desc
       in
       lambda_environments :=
         (environment_type_desc, environment_typedef) :: !lambda_environments;
-      (environment_type_desc, environment_typedef) *)
+      (environment_type_desc, environment_typedef)
 
 and codegen_lambda_capture (lamtype : perktype) : string =
   match lamtype with
@@ -1007,12 +1014,12 @@ and codegen_lambda_capture (lamtype : perktype) : string =
       let lambda_type_desc =
         type_descriptor_of_perktype (func_of_lambda_void lamtype)
       in
-      (* let environment_type_desc, environment_typedef =
-        codegen_lambda_environment free_vars
-      in *)
       let environment_type_desc, environment_typedef =
-        (get_type_descriptor_for_partition lamtype, "")
+        codegen_lambda_environment lamtype
       in
+      (* let environment_type_desc, environment_typedef =
+        (get_type_descriptor_for_partition lamtype, "")
+      in *)
       let capture_type_desc = lambda_type_desc ^ "_" ^ environment_type_desc in
       let tmp_typedef =
         List.find_opt
@@ -1024,7 +1031,7 @@ and codegen_lambda_capture (lamtype : perktype) : string =
       | None ->
           let typedef =
             Printf.sprintf
-              "typedef struct %s {\n    struct %s env;\n    %s func;\n} %s"
+              "typedef struct %s {\n    %s env;\n    %s func;\n} %s"
               capture_type_desc environment_type_desc lambda_type_desc
               capture_type_desc
           in

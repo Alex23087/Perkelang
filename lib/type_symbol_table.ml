@@ -178,8 +178,7 @@ let rec type_descriptor_of_perktype (t : perktype) : string =
       "vararg"
       (* This is probably problematic, cannot define function pointers with ... . Nvm, apparently you can 😕*)
   | ArcheType (name, _decls) -> name
-  | ArchetypeSum archs ->
-      "Sum" ^ String.concat "Plus" (List.map type_descriptor_of_perktype archs)
+  | ArchetypeSum _archs -> archetype_sum_name t
   | Modeltype (name, _archs, _decls, _constr_params) -> name
   | Optiontype t -> Printf.sprintf "%s_opt" (type_descriptor_of_perktype t)
   | Infer ->

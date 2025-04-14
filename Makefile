@@ -43,13 +43,13 @@ run_perf:
 .PHONY: debug_run
 debug_run:
 	opam exec -- dune build --profile=dev
-	# OCAMLRUNPARAM=b ./_build/default/bin/perkc.exe test/test.perk
-	# gcc -o test/test.out test/test.c
-	# ./test/test.out
+	OCAMLRUNPARAM=b ./_build/default/bin/perkc.exe test/test.perk
+	gcc -o test/test.out test/test.c
+	./test/test.out
 
-	OCAMLRUNPARAM=b ./_build/default/bin/perkc.exe test/normalexec/09.capture_list_overapprox.perk
-	gcc -o test/normalexec/09.capture_list_overapprox.out test/normalexec/09.capture_list_overapprox.c
-	./test/normalexec/09.capture_list_overapprox.out
+	# OCAMLRUNPARAM=b ./_build/default/bin/perkc.exe test/normalexec/09.capture_list_overapprox.perk
+	# gcc -o test/normalexec/09.capture_list_overapprox.out test/normalexec/09.capture_list_overapprox.c
+	# ./test/normalexec/09.capture_list_overapprox.out
 
 	# OCAMLRUNPARAM=b ./_build/default/bin/perkc.exe ../super_perkio/src/main.perk
 	# gcc -o ../super_perkio/out/super_perkio ../super_perkio/src/main.c -lSDL2
