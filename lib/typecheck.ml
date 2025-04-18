@@ -536,7 +536,7 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
         | _, t -> (op, t)
       in
       (annot_copy expr (PostUnop (op, expr_res)), res_type)
-  | Parenthesised e -> typecheck_expr e
+  | Parenthesised e -> let (e1, typ) = typecheck_expr ~expected_return e in (annot_copy expr (Parenthesised e1), typ)
   | Subscript (container, accessor) -> (
       let container_res, container_type = typecheck_expr container in
       let accessor_res, accessor_type = typecheck_expr accessor in
