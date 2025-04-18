@@ -113,7 +113,6 @@ and expr_t =
   | Float of float
   | Char of char
   | String of string
-  | Pointer of expr_a
   | Var of perkident
   | Apply of expr_a * expr_a list * perktype option
   | Binop of binop * expr_a * expr_a

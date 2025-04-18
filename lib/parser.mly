@@ -127,7 +127,6 @@ perkvardesc:
   | Ident error { raise (ParseError("variable descriptor expected (e.g. banana : int)")) }
 
 expr:
-  | Star e = expr                                                                                          { annotate_2_code $loc (Ast.Pointer e) }
   | e1 = expr LParen args = separated_list(Comma, expr) RParen                                             { annotate_2_code $loc (Ast.Apply (e1, args, None)) }
   | e1 = expr b = binop e2 = expr                                                                          { annotate_2_code $loc (Ast.Binop (b, e1, e2)) }
   | u = preunop e = expr                                                                                   { annotate_2_code $loc (Ast.PreUnop (u, e)) }
