@@ -1,0 +1,9 @@
+extern printf: (char*, ...) -> void
+
+fun main(): void {
+    let scemo := 0.5;
+    let x : int = *(cast(int*, &scemo));
+    // L'originale con la y finale
+    let bananopoly : float = *(cast(float*, &x));
+    printf("%f\n", bananopoly);
+}

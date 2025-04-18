@@ -58,7 +58,6 @@ and free_variables_expr (e : expr_a) : perkident list * perkident list =
     ( (match ( $ ) e with
       | Nothing _ | Int _ | Float _ | Char _ | String _ -> []
       | Something (e1, _) -> free_variables_expr e1 |> fst
-      | Pointer e1 -> free_variables_expr e1 |> fst
       | Var id -> [ id ]
       | Apply (e1, el, _) ->
           fst (free_variables_expr e1)

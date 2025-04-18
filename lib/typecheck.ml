@@ -430,9 +430,6 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
   | Float _ -> (expr, ([], Basetype "float", []))
   | Char _ -> (expr, ([], Basetype "char", []))
   | String _ -> (expr, ([], Pointertype ([], Basetype "char", []), []))
-  | Pointer e ->
-      let expr_res, t = typecheck_expr e in
-      (annot_copy expr (Pointer expr_res), ([], Pointertype t, []))
   | Var id -> (
       match lookup_var id with
       | Some t -> (expr, t)
@@ -726,7 +723,9 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
           in
           bind_type_if_needed arraytype;
           (annot_copy expr (Array (xexpr :: exprs_e)), arraytype))
-  | Cast (t, e) -> (annot_copy expr (Cast (t, fst (typecheck_expr e))), snd t)
+  | Cast (t, e) -> 
+    bind_type_if_needed (snd t);
+    (annot_copy expr (Cast (t, fst (typecheck_expr e))), snd t)
   | IfThenElseExpr (guard, then_e, else_e) ->
       let guard_res, guard_type = typecheck_expr guard in
       (match guard_type with

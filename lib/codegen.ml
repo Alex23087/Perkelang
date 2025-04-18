@@ -612,9 +612,6 @@ and codegen_expr (e : expr_a) : string =
   | Float f -> string_of_float f
   | Char c -> Printf.sprintf "'%c'" c
   | String s -> Printf.sprintf "\"%s\"" (String.escaped s)
-  | Pointer e ->
-      let code = codegen_expr e in
-      Printf.sprintf "*%s" code
   | Var id -> id
   | Apply (e, args, _app_type) -> (
       (* TODO: LAMBDA handle application type *)
