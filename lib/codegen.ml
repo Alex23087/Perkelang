@@ -775,8 +775,12 @@ and codegen_expr (e : expr_a) : string =
           Printf.sprintf "((%s) {{}, %s})"
             (type_descriptor_of_perktype to_t)
             (codegen_expr e)
+      | (_, Lambdatype _, _), (_, Lambdatype _, _) ->
+        Printf.sprintf "((%s)%s)"
+          (type_descriptor_of_perktype to_t)
+          (codegen_expr e)
       | _ ->
-          Printf.sprintf "((%s)%s)"
+          Printf.sprintf "((%s)(%s))"
             (type_descriptor_of_perktype to_t)
             (codegen_expr e))
   | IfThenElseExpr (guard, then_e, else_e) ->
