@@ -1,7 +1,5 @@
 extern printf: (char*, ...) -> void
 
-let true: int = 1
-
 fun main (): int {
     printf("Result: %d\n", if true then 1 else 0);
     return 0;

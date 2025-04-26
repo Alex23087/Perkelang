@@ -1,0 +1,9 @@
+extern printf: (char*, ...) -> void
+
+fun main (): void {
+    if (true) {
+        printf("true")
+    } else {
+        printf("false")
+    }
+}

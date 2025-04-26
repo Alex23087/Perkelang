@@ -12,16 +12,16 @@ model Test {
         self.y = y;
     },
 
-    let print : () -> void = () : void => {
+    let print := () : void => {
         printf("x: %d\n", self.x);
     }
 }
 
 fun main(): int {
-    let x := 42;
+    let x := 42696969;
 
     let test := (y: int): int => {
-        printf("test %d\n", 696969);
+        printf("test %d\n", x);
     };
     
     test(5);

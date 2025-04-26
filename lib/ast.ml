@@ -109,6 +109,7 @@ and perkdef = perkdecl * expr_a [@@deriving show, eq]
 and expr_t =
   | Nothing of perktype
   | Something of expr_a * perktype
+  | Bool of bool
   | Int of int
   | Float of float
   | Char of char

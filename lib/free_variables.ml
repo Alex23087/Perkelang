@@ -56,7 +56,7 @@ let rec free_variables_command (cmd : command_a) :
 and free_variables_expr (e : expr_a) : perkident list * perkident list =
   let free_variables_expr (e : expr_a) : perkident list * perkident list =
     ( (match ( $ ) e with
-      | Nothing _ | Int _ | Float _ | Char _ | String _ -> []
+      | Nothing _ | Bool _ | Int _ | Float _ | Char _ | String _ -> []
       | Something (e1, _) -> free_variables_expr e1 |> fst
       | Var id -> [ id ]
       | Apply (e1, el, _) ->

@@ -153,16 +153,16 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
       in
       (* Transform all functions into lambdas *)
       (* let fields =
-        List.map
-          (fun f -> lambda_def_of_func_def_with_self f (self_type ident))
-          fields
-      in *)
+           List.map
+             (fun f -> lambda_def_of_func_def_with_self f (self_type ident))
+             fields
+         in *)
       let fields = List.map (fun f -> lambda_def_of_func_def f) fields in
       (* let fields =
-        List.map
-          (fun ((typ, id), expr) -> ((lambdatype_of_func typ, id), expr))
-          fields
-      in *)
+           List.map
+             (fun ((typ, id), expr) -> ((lambdatype_of_func typ, id), expr))
+             fields
+         in *)
       (* Check that all the required fields are defined *)
       List.iter
         (fun ((typ, id), arch) ->
@@ -173,8 +173,8 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
                   let _ =
                     try
                       (* match_types t
-                        (typ |> lambdatype_of_func
-                        |> add_parameter_to_func void_pointer) *)
+                         (typ |> lambdatype_of_func
+                         |> add_parameter_to_func void_pointer) *)
                       match_types t typ
                       (* TODO: Check very carefully: Should it be t typ or typ t? *)
                     with Type_match_error msg -> raise_type_error e msg
@@ -333,7 +333,8 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
   | IfThenElse (guard, then_branch, else_branch) ->
       let guard_res, guard_type = typecheck_expr guard in
       (match guard_type with
-      | _, Basetype "int", _ -> () (* TODO: Decide what TODO with booleans *)
+      | _, Basetype "bool", _ -> () (* TODO: Decide what TODO with booleans *)
+      | _, Basetype "int", _ -> ()
       | _ ->
           raise_type_error cmd
             (Printf.sprintf
@@ -350,7 +351,8 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
   | Whiledo (guard, body) ->
       let guard_res, guard_type = typecheck_expr guard in
       (match guard_type with
-      | _, Basetype "int", _ -> () (* TODO: Decide what TODO with booleans *)
+      | _, Basetype "bool", _ -> () (* TODO: Decide what TODO with booleans *)
+      | _, Basetype "int", _ -> ()
       | _ ->
           raise_type_error cmd
             (Printf.sprintf
@@ -364,7 +366,8 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
   | Dowhile (guard, body) ->
       let guard_res, guard_type = typecheck_expr guard in
       (match guard_type with
-      | _, Basetype "int", _ -> () (* TODO: Decide what TODO with booleans *)
+      | _, Basetype "bool", _ -> () (* TODO: Decide what TODO with booleans *)
+      | _, Basetype "int", _ -> ()
       | _ ->
           raise_type_error cmd
             (Printf.sprintf
@@ -379,7 +382,8 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
       let initcmd_res = typecheck_command ~retype initcmd in
       let guard_res, guard_type = typecheck_expr guard in
       (match guard_type with
-      | _, Basetype "int", _ -> () (* TODO: Decide what TODO with booleans *)
+      | _, Basetype "bool", _ -> () (* TODO: Decide what TODO with booleans *)
+      | _, Basetype "int", _ -> ()
       | _ ->
           raise_type_error cmd
             (Printf.sprintf
@@ -426,6 +430,7 @@ and typecheck_command ?(retype : perktype option = None) (cmd : command_a) :
 and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
     expr_a * perktype =
   match ( $ ) expr with
+  | Bool _ -> (expr, ([], Basetype "bool", []))
   | Int _ -> (expr, ([], Basetype "int", []))
   | Float _ -> (expr, ([], Basetype "float", []))
   | Char _ -> (expr, ([], Basetype "char", []))
@@ -467,6 +472,47 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
       ( annot_copy expr (Apply (fun_expr, List.map fst param_rets, apptype)),
         fun_ret_type )
   | Binop (op, lhs, rhs) ->
+      (match op with
+      | Add | Sub | Mul | Div ->
+          let lhs_res, lhs_type = typecheck_expr lhs in
+          let rhs_res, rhs_type = typecheck_expr rhs in
+          let lhs_res, lhs_type, rhs_res, rhs_type =
+            match (lhs_res, lhs_type, rhs_res, rhs_type) with
+            (* Two int or two float expressions, no cast to be done *)
+            | _, (_al, Basetype "int", _ql), _, (_ar, Basetype "int", _qr)
+            | _, (_al, Basetype "float", _ql), _, (_ar, Basetype "float", _qr)
+              ->
+                (lhs_res, lhs_type, rhs_res, rhs_type)
+            (* int op float, cast first one to float *)
+            | _, (_al, Basetype "int", _ql), _, (_ar, Basetype "float", _qr) ->
+                ( annot_copy lhs_res (Cast ((lhs_type, rhs_type), lhs_res)),
+                  rhs_type,
+                  rhs_res,
+                  rhs_type )
+            (* float op int, cast second one to float *)
+            | _, (_al, Basetype "float", _ql), _, (_ar, Basetype "int", _qr) ->
+                ( lhs_res,
+                  lhs_type,
+                  annot_copy rhs_res (Cast ((rhs_type, lhs_type), rhs_res)),
+                  lhs_type )
+            | _, (_a, Basetype "float", _q), _, _
+            | _, (_a, Basetype "int", _q), _, _ ->
+                raise_type_error rhs "Numerical type expected"
+            | _, _, _, (_a, Basetype "float", _q)
+            | _, _, _, (_a, Basetype "int", _q) ->
+                raise_type_error lhs "Numerical type expected"
+            | _ -> raise_type_error expr "Numerical type expected"
+          in
+          let res_type =
+            try match_types lhs_type rhs_type
+            with Type_match_error msg -> raise_type_error expr msg
+          in
+          let lhs_res, _lhs_type = fill_nothing lhs_res lhs_type res_type in
+          let rhs_res, _rhs_type = fill_nothing rhs_res rhs_type res_type in
+          (annot_copy expr (Binop (op, lhs_res, rhs_res)), res_type)
+          |> ignore (*TODO: Remove this ignore*)
+      | Eq | Lt | Leq | Gt | Geq | Neq | Land | Lor -> ());
+      (* TODO: Continue here *)
       let lhs_res, lhs_type = typecheck_expr lhs in
       let rhs_res, rhs_type = typecheck_expr rhs in
       let res_type =
@@ -527,7 +573,7 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
         match (op, resolve_type expr_type) with
         | OptionGet _, (_, Optiontype t, _) -> (OptionGet (Some t), t)
         | OptionIsSome, (_, Optiontype _t, _) ->
-            (op, ([], Basetype "int", []))
+            (op, ([], Basetype "bool", []))
             (* TODO: Decide what TODO with bools*)
         | OptionGet _, _ | OptionIsSome, _ ->
             raise_type_error expr
@@ -727,9 +773,12 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
     bind_type_if_needed (snd t);
     (annot_copy expr (Cast (t, fst (typecheck_expr e))), snd t)
   | IfThenElseExpr (guard, then_e, else_e) ->
-      let guard_res, guard_type = typecheck_expr guard in
+      let guard_res, guard_type =
+        typecheck_expr ~expected_return:(Some bool_type) guard
+      in
       (match guard_type with
-      | _, Basetype "int", _ -> () (* TODO: Decide what TODO with booleans *)
+      | _, Basetype "bool", _ -> () (* TODO: Decide what TODO with booleans *)
+      | _, Basetype "int", _ -> ()
       | _ ->
           raise_type_error expr
             (Printf.sprintf
@@ -739,8 +788,8 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
       let then_e_res, then_e_type = typecheck_expr then_e in
       let else_e_res, else_e_type = typecheck_expr else_e in
       let res_type =
-        try match_types guard_type else_e_type
-        with Type_match_error msg -> raise_type_error expr msg
+        try match_types then_e_type else_e_type
+        with Type_match_error msg -> raise_type_error else_e msg
       in
       let then_e_res, _then_e_type =
         fill_nothing then_e_res then_e_type res_type
@@ -863,7 +912,7 @@ and match_types ?(coalesce : bool = false) (expected : perktype)
       | Lambdatype (params1, ret1, free1), Lambdatype (params2, ret2, free2)
         when List.equal
                (* For now, two lambdas have to be capturing the same values *)
-               (fun (typ1, id1) (typ2, id2) ->
+                 (fun (typ1, id1) (typ2, id2) ->
                  id1 = id2 && equal_perktype typ1 typ2)
                free1 free2 ->
           let param_types = List.map2 match_types_aux params1 params2 in

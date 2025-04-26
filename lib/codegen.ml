@@ -121,9 +121,9 @@ and codegen_program (tldfs : topleveldef_a list) : string =
     say_here "codegen_program";
     filter_var_table ();
     (* List.iter
-      (fun (id, typ) ->
-        Printf.printf "%s: %s\n" id (type_descriptor_of_perktype typ))
-      !all_vars; *)
+       (fun (id, typ) ->
+         Printf.printf "%s: %s\n" id (type_descriptor_of_perktype typ))
+       !all_vars; *)
     let body =
       String.concat "\n"
         (List.map
@@ -134,7 +134,7 @@ and codegen_program (tldfs : topleveldef_a list) : string =
       |> String.trim
     in
     (* Write includes *)
-    "#include <malloc.h>\n"
+    "#include <malloc.h>\n#include <stdbool.h>\n"
     ^ String.concat "\n"
         (List.map (fun lib -> Printf.sprintf "#include %s" lib) !import_list)
     ^ "\n\n"
@@ -150,32 +150,32 @@ and codegen_program (tldfs : topleveldef_a list) : string =
        __VA_ARGS__))\n" ^ "\n\n"
     (* Write typedefs for functions*)
     (* ^ Hashtbl.fold
-         (fun _ v acc -> Printf.sprintf "%s%s;\n" acc (snd_3 v))
-         function_type_hashmap ""
-     ^ "\n" *)
+           (fun _ v acc -> Printf.sprintf "%s%s;\n" acc (snd_3 v))
+           function_type_hashmap ""
+       ^ "\n" *)
     (* Write typedefs for tuples *)
     (* ^ Hashtbl.fold
-      (fun _ v acc -> Printf.sprintf "%s%s;\n" acc v)
-      tuple_hashmap "" *)
+       (fun _ v acc -> Printf.sprintf "%s%s;\n" acc v)
+       tuple_hashmap "" *)
     (* Write struct definitions *)
     (* ^ String.concat "\n" (List.rev !struct_def_list)
-     ^ "\n\n" *)
+       ^ "\n\n" *)
     ^ generate_types ()
     ^ "\n"
     (* Write environment typedefs *)
     (* ^ (if List.length !lambda_environments = 0 then ""
-        else
-          "\n"
-          ^ String.concat ";\n"
-              (List.map (fun (_name, typ) -> typ) !lambda_environments)
-          ^ ";\n\n")
-     (* Write lambda capture dummies *)
-     ^ (if List.length !lambda_capture_dummies = 0 then ""
-        else
-          "\n"
-          ^ String.concat ";\n"
-              (List.map (fun (_name, typ) -> typ) !lambda_capture_dummies)
-          ^ ";\n\n") *)
+          else
+            "\n"
+            ^ String.concat ";\n"
+                (List.map (fun (_name, typ) -> typ) !lambda_environments)
+            ^ ";\n\n")
+       (* Write lambda capture dummies *)
+       ^ (if List.length !lambda_capture_dummies = 0 then ""
+          else
+            "\n"
+            ^ String.concat ";\n"
+                (List.map (fun (_name, typ) -> typ) !lambda_capture_dummies)
+            ^ ";\n\n") *)
     (* Write hoisted function signatures *)
     ^ Hashtbl.fold
         (fun id typ acc ->
@@ -190,9 +190,9 @@ and codegen_program (tldfs : topleveldef_a list) : string =
         lambdas_hashmap ""
   in
   (* Printf.printf "dependenciesoftype called: %d\nused: %d\nunused: %d\n"
-    !called_counter !used_counter !unused_counter;
-  Printf.printf "resolve_type called: %d\nused: %d\nunused: %d\n" !resolve_count
-    !resolve_hit !resolve_miss; *)
+       !called_counter !used_counter !unused_counter;
+     Printf.printf "resolve_type called: %d\nused: %d\nunused: %d\n" !resolve_count
+       !resolve_hit !resolve_miss; *)
   s
 
 and codegen_topleveldef (tldf : topleveldef_a) : string =
@@ -382,19 +382,19 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
                         codegen_type (add_parameter_to_func (self_type name) t)
                       in
                       (* Printf.sprintf
-                        "%s    self->%s.%s = (__perkelang_capture_dummy_%s = \
-                         self->%s, (%s){__perkelang_capture_dummy_%s.env, \
-                         (%s)__perkelang_capture_dummy_%s.func})"
-                        indent_string a id lamtype id arch_lamtype lamtype
-                      arch_funtype lamtype *)
+                           "%s    self->%s.%s = (__perkelang_capture_dummy_%s = \
+                            self->%s, (%s){__perkelang_capture_dummy_%s.env, \
+                            (%s)__perkelang_capture_dummy_%s.func})"
+                           indent_string a id lamtype id arch_lamtype lamtype
+                         arch_funtype lamtype *)
                       (* TEMPORARILY EXPAND CAST *)
                       Printf.sprintf
                         "%s    self->%s.%s = CAST_LAMBDA(self->%s,\n\
                          %s        %s,\n\
                          %s        %s,\n\
-                         %s        %s)"
-                        indent_string a id id indent_string lamtype
-                        indent_string arch_lamtype indent_string arch_funtype
+                         %s        %s)" indent_string a id id indent_string
+                        lamtype indent_string arch_lamtype indent_string
+                        arch_funtype
                   | _ ->
                       Printf.sprintf "%s    self->%s.%s = (%sself->%s"
                         indent_string a id
@@ -608,6 +608,7 @@ and codegen_qual (qual : perktype_qualifier) : string =
 and codegen_expr (e : expr_a) : string =
   let e' = ( $ ) e in
   match e' with
+  | Bool b -> string_of_bool b
   | Int i -> string_of_int i
   | Float f -> string_of_float f
   | Char c -> Printf.sprintf "'%c'" c
@@ -651,11 +652,11 @@ and codegen_expr (e : expr_a) : string =
                   let lamtype = add_parameter_to_func (self_type _n) lamtype in
                   let lamtype_desc = type_descriptor_of_perktype lamtype in
                   (* Printf.sprintf
-                    "(__perkelang_capture_dummy_%s = %s, \
-                     __perkelang_capture_dummy_%s.func(&(__perkelang_capture_dummy_%s.env), \
-                     %s%s))"
-                    lamtype_desc expr_str lamtype_desc lamtype_desc e1_str
-                    args_str *)
+                     "(__perkelang_capture_dummy_%s = %s, \
+                      __perkelang_capture_dummy_%s.func(&(__perkelang_capture_dummy_%s.env), \
+                      %s%s))"
+                     lamtype_desc expr_str lamtype_desc lamtype_desc e1_str
+                     args_str *)
                   let args_str = e1_str ^ args_str in
                   Printf.sprintf "CALL_LAMBDA(%s, %s, %s)" expr_str lamtype_desc
                     args_str
@@ -663,11 +664,11 @@ and codegen_expr (e : expr_a) : string =
                   let lamtype = add_parameter_to_func void_pointer lamtype in
                   let lamtype_desc = type_descriptor_of_perktype lamtype in
                   (* Printf.sprintf
-                    "(__perkelang_capture_dummy_%s = %s, \
-                     __perkelang_capture_dummy_%s.func(&(__perkelang_capture_dummy_%s.env), \
-                     %s.self%s))"
-                    lamtype_desc expr_str lamtype_desc lamtype_desc e1_str
-                    args_str  *)
+                     "(__perkelang_capture_dummy_%s = %s, \
+                      __perkelang_capture_dummy_%s.func(&(__perkelang_capture_dummy_%s.env), \
+                      %s.self%s))"
+                     lamtype_desc expr_str lamtype_desc lamtype_desc e1_str
+                     args_str *)
                   let args_str = e1_str ^ ".self" ^ args_str in
                   Printf.sprintf "CALL_LAMBDA(%s, %s, %s)" expr_str lamtype_desc
                     args_str
@@ -683,13 +684,13 @@ and codegen_expr (e : expr_a) : string =
                 if List.length args = 0 then "" else ", " ^ args_str
               in
               (* Printf.sprintf
-                "(__perkelang_capture_dummy_%s = %s, \
-                 __perkelang_capture_dummy_%s.func(&(__perkelang_capture_dummy_%s.env)%s))"
-                (type_descriptor_of_perktype lamtype)
-                expr_str
-                (type_descriptor_of_perktype lamtype)
-                (type_descriptor_of_perktype lamtype)
-                args_str *)
+                 "(__perkelang_capture_dummy_%s = %s, \
+                  __perkelang_capture_dummy_%s.func(&(__perkelang_capture_dummy_%s.env)%s))"
+                 (type_descriptor_of_perktype lamtype)
+                 expr_str
+                 (type_descriptor_of_perktype lamtype)
+                 (type_descriptor_of_perktype lamtype)
+                 args_str *)
               if List.length args = 0 then
                 Printf.sprintf "CALL_LAMBDA0(%s, %s)" expr_str
                   (type_descriptor_of_perktype lamtype)
@@ -843,7 +844,8 @@ and generate_types () =
     ref
       (Hashtbl.fold
          (fun k (typ, code) acc ->
-           (k, (typ, code, dependencies_of_type typ)) :: acc)
+           if List.mem (k, (typ, code)) builtin_types then acc
+           else (k, (typ, code, dependencies_of_type typ)) :: acc)
          type_symbol_table [])
   in
   let sort_based_on_deps_count (_, (_, _, d_a)) (_, (_, _, d_b)) =
@@ -851,10 +853,10 @@ and generate_types () =
   in
   ft_list := List.sort sort_based_on_deps_count !ft_list;
   (* List.iter
-    (fun (id, (_, _, deps)) ->
-      Printf.printf "Type: %s, Dependencies: [%s]\n" id
-        (String.concat ", " deps))
-    !ft_list; *)
+     (fun (id, (_, _, deps)) ->
+       Printf.printf "Type: %s, Dependencies: [%s]\n" id
+         (String.concat ", " deps))
+     !ft_list; *)
   while List.length !ft_list > 0 do
     (* say_here "generate_types"; *)
     let _id, (_typ, _code, _deps) = List.hd !ft_list in

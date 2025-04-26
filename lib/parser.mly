@@ -8,6 +8,7 @@
 %token EOF
 %token Plus Eq Neq Lt Leq Gt Geq Minus Star Div Ampersand PlusPlus MinusMinus Dot Ellipsis Question Land Lor
 %token Fun Assign If Then Else While Do For
+%token <bool> Boolean
 %token <int> Integer
 %token <float> Float
 %token <char> Character
@@ -133,6 +134,7 @@ expr:
   | e = expr u = postunop %prec POSTFIX                                                                    { annotate_2_code $loc (Ast.PostUnop (u, e)) }
   | LParen id_list = perkvardesc_list RParen Colon ret = perktype Bigarrow LBrace c = command RBrace       { annotate_2_code $loc (Ast.Lambda (ret, id_list, c, [])) }
   | LParen RParen Colon ret = perktype Bigarrow LBrace c = command RBrace                                  { annotate_2_code $loc (Ast.Lambda (ret, [], c, [])) }
+  | b = Boolean                                                                                            { annotate_2_code $loc (Ast.Bool (b)) }
   | n = Integer                                                                                            { annotate_2_code $loc (Ast.Int (n)) }
   | f = Float                                                                                              { annotate_2_code $loc (Ast.Float (f)) }
   | c = Character                                                                                          { annotate_2_code $loc (Ast.Char (c)) }

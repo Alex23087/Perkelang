@@ -2,8 +2,18 @@ open Ast
 open Errors
 open Utils
 
+let builtin_types =
+  [
+    ("void", (void_type, None));
+    ("int", (int_type, None));
+    ("float", (float_type, None));
+    ("char", (char_type, None));
+  ]
+
 let type_symbol_table : (perkident, perktype * string option) Hashtbl.t =
-  Hashtbl.create 10
+  let tbl = Hashtbl.create 10 in
+  List.iter (fun (id, t) -> Hashtbl.add tbl id t) builtin_types;
+  tbl
 
 let lookup_type (id : perkident) : perktype option =
   if Hashtbl.mem type_symbol_table id then
@@ -378,11 +388,11 @@ let dependencies_of_type (typ : perktype) : perkident list =
         in
         Hashtbl.add type_dep_table typ deps;
         (* Printf.printf "Type Dependency Table:\n";
-        Hashtbl.iter
-          (fun typ deps ->
-            Printf.printf "%s: [%s]\n" (show_perktype typ)
-              (String.concat ", " deps))
-          type_dep_table; *)
+           Hashtbl.iter
+             (fun typ deps ->
+               Printf.printf "%s: [%s]\n" (show_perktype typ)
+                 (String.concat ", " deps))
+             type_dep_table; *)
         (deps, visited)
   in
   fst (dependencies_of_type_aux typ [])

@@ -27,6 +27,10 @@ and add_parameter_to_func_2 (param_type : perktype) (func_type : perktype) :
   | _ -> func_type
 
 and void_type : perktype = ([], Basetype "void", [])
+and int_type : perktype = ([], Basetype "int", [])
+and float_type : perktype = ([], Basetype "float", [])
+and char_type : perktype = ([], Basetype "char", [])
+and bool_type : perktype = ([], Basetype "bool", [])
 and void_pointer : perktype = ([], Pointertype ([], Basetype "void", []), [])
 and self_type (name : perkident) : perktype = ([], Basetype name, [])
 
@@ -73,12 +77,12 @@ and lambda_expr_of_func_expr (expr : expr_a) (fromtype : perktype) : expr_a =
   | _ -> expr
 
 (* and lambda_def_of_func_def_with_self (def : perkdef) (selftype : perktype) :
-    perkdef =
-  match def with
-  | (typ, id), expr ->
-      let new_typ = lambdatype_of_func typ in
-      let new_expr = lambda_expr_of_func_expr_with_self expr typ selftype in
-      ((new_typ, id), new_expr) *)
+     perkdef =
+   match def with
+   | (typ, id), expr ->
+       let new_typ = lambdatype_of_func typ in
+       let new_expr = lambda_expr_of_func_expr_with_self expr typ selftype in
+       ((new_typ, id), new_expr) *)
 
 and lambda_def_of_func_def (def : perkdef) : perkdef =
   let (typ, id), expr = def in

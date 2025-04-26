@@ -1,0 +1,10 @@
+extern printf: (char*, ...) -> void
+
+fun main (): void {
+    let b : bool = 10 < 30;
+    if (10 < 30) {
+        printf("true")
+    } else {
+        printf("false")
+    }
+}

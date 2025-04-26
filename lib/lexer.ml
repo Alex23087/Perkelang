@@ -87,8 +87,8 @@ let rec token lexbuf =
   | "for" -> For
   | "return" -> Return
   (*| "switch"        -> Switch
-  | "break"         -> Break
-  | "continue"      -> Continue *)
+    | "break"         -> Break
+    | "continue"      -> Continue *)
   | "skip" -> Skip
   | "let" -> Let
   | "public" -> Public
@@ -101,7 +101,7 @@ let rec token lexbuf =
   | "import" -> Import
   | "open" -> Open
   (* | "true" -> Integer 1
-  | "false" -> Integer 0 *)
+     | "false" -> Integer 0 *)
   | "archetype" | "theory" | "interface" | "prototype" | "trait" | "typeclass"
     ->
       Archetype (* TODO reinvent the wheel*)
@@ -111,6 +111,8 @@ let rec token lexbuf =
   | "~>" | "as" | "⤳" | "⇝" -> As
   | "->" | "→" -> Arrow
   | "=>" | "⇒" -> Bigarrow
+  | "true" -> Boolean true
+  | "false" -> Boolean false
   | identifier -> Ident (Sedlexing.Latin1.lexeme lexbuf)
   | "0x", hex_number -> Integer (int_of_string (Sedlexing.Latin1.lexeme lexbuf))
   | "0b", Plus ('0' | '1') ->
