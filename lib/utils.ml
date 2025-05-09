@@ -1,4 +1,5 @@
 open Ast
+open Errors
 
 let rec say_here (_msg : string) : unit =
   (* Printf.printf "%s\n" _msg;
@@ -42,10 +43,10 @@ and func_of_lambda_void (t : perktype) : perktype =
         q )
   | _ -> failwith "func_of_lambda_void: not a lambda type"
 
-and func_of_lambda (t : perktype) : perktype =
+and functype_of_lambdatype (t : perktype) : perktype =
   match t with
   | a, Lambdatype (args, ret, _), q -> (a, Funtype (args, ret), q)
-  | _ -> failwith "func_of_lambda: not a lambda type"
+  | _ -> failwith "functype_of_lambdatype: not a lambda type"
 
 and lambdatype_of_func (typ : perktype) : perktype =
   match typ with
@@ -102,3 +103,51 @@ and lambda_def_of_func_def_ (def : perkdef) : perkdef =
 and discard_type_aq (typ : perktype) : perktype_partial =
   let _a, t, _q = typ in
   t
+
+and lambda_of_func (func : perkfundef) : expr_t =
+  let typ, _id, args, body = func in
+  Lambda (typ, args, body, [])
+
+and decl_of_deforfun (def : deforfun_a) : perkdecl =
+  match ( $ ) def with
+  (* If this def is a function, make its type a function type *)
+  | DefFun (typ, id, _, _) ->
+      let new_typ =
+        match typ with
+        | a, Lambdatype (params, ret, free_vars), d ->
+            if free_vars <> [] then
+              raise_type_error def "function contains free vars"
+            else (a, Funtype (params, ret), d)
+        | _ -> typ
+      in
+      (new_typ, id)
+  (* If this def is a lambda, make its type a lambda type *)
+  | DefVar ((typ, id), _) ->
+      let new_typ =
+        match typ with
+        | a, Funtype (params, ret), d -> (a, Lambdatype (params, ret, []), d)
+        | _ -> typ
+      in
+      (new_typ, id)
+
+and decl_of_declorfun (def : declorfun_a) : perkdecl =
+  match ( $ ) def with
+  (* If this def is a function, make its type a function type *)
+  | DeclFun (typ, id) ->
+      let new_typ =
+        match typ with
+        | a, Lambdatype (params, ret, free_vars), d ->
+            if free_vars <> [] then
+              raise_type_error def "function contains free vars"
+            else (a, Funtype (params, ret), d)
+        | _ -> typ
+      in
+      (new_typ, id)
+  (* If this def is a lambda, make its type a lambda type *)
+  | DeclVar (typ, id) ->
+      let new_typ =
+        match typ with
+        | a, Funtype (params, ret), d -> (a, Lambdatype (params, ret, []), d)
+        | _ -> typ
+      in
+      (new_typ, id)

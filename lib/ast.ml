@@ -25,7 +25,7 @@ let annotate_2_code (start_pos, end_pos) (node : 'a) : 'a annotated =
 let annotate_dummy (node : 'a) : 'a annotated =
   { loc = Location.dummy_pos; node }
 
-let annot_copy (annotated_node : 'a annotated) (node : 'a) : 'a annotated =
+let annot_copy (annotated_node : 'a annotated) (node : 'b) : 'b annotated =
   { loc = annotated_node.loc; node }
 
 type perkident = string [@@deriving show, eq]
@@ -104,6 +104,12 @@ type postunop =
 
 and perkdef = perkdecl * expr_a [@@deriving show, eq]
 
+and perkfundef =
+  perktype
+  * perkident
+  * perkvardesc list
+  * command_a (* return, name, args, body *)
+
 (* name, attributes, methods *)
 (* and perklass = Class of perkident * (perkdef list) * (perkfun list) [@@deriving show, eq] *)
 and expr_t =
@@ -156,17 +162,23 @@ and topleveldef_t =
   | Import of string
   | Extern of perkident * perktype
   | Def of perkdef * perktype option
-  | Fundef of
-      perktype
-      * perkident
-      * perkvardesc list
-      * command_a (* return, name, args, body *)
-  | Archetype of perkident * perkdecl list
-  | Model of perkident * perkident list * perkdef list
+  | Fundef of perkfundef
+  | Archetype of perkident * declorfun_a list
+  | Model of perkident * perkident list * deforfun_a list
+
+and deforfun_t =
+  | DefVar of perkdef
+  | DefFun of perkfundef
+
+and declorfun_t =
+  | DeclVar of perkdecl
+  | DeclFun of perkdecl
 
 and expr_a = expr_t annotated [@@deriving show, eq]
 and command_a = command_t annotated [@@deriving show, eq]
 and topleveldef_a = topleveldef_t annotated [@@deriving show, eq]
+and deforfun_a = deforfun_t annotated [@@deriving show, eq]
+and declorfun_a = declorfun_t annotated [@@deriving show, eq]
 
 let all_vars : (perkident * perktype) list ref = ref []
 

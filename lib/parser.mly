@@ -48,8 +48,9 @@
 %type <Ast.topleveldef_a> topleveldef
 %type <Ast.command_a> command
 %type <Ast.perkdef> perkdef
+%type <Ast.deforfun_a> deforfun
 %type <Ast.perkvardesc> perkvardesc
-%type <Ast.topleveldef_a> perkfun
+%type <Ast.perkfundef> perkfun
 %type <Ast.perktype> perktype
 %type <Ast.perktype_partial> perkfuntype
 %type <Ast.binop> binop
@@ -75,10 +76,10 @@ topleveldef:
   | Extern id = Ident Colon t = perktype                                                                   { annotate_2_code $loc (Ast.Extern (id, t)) }
   | ic = InlineC                                                                                           { annotate_2_code $loc (Ast.InlineC(ic)) }
   | d = perkdef                                                                                            { annotate_2_code $loc (Ast.Def (d, None)) }
-  | Archetype i = Ident LBrace l = perkvardesc_list RBrace                                                 { annotate_2_code $loc (Ast.Archetype (i, l)) }
-  | Model i = Ident Colon il = ident_list LBrace l = perkdef_list RBrace                                   { annotate_2_code $loc (Ast.Model (i, il, l)) }
-  | Model i = Ident LBrace l = perkdef_list RBrace                                                         { annotate_2_code $loc (Ast.Model (i, [], l)) }
-  | Fun pf = perkfun                                                                                       { pf }
+  | Archetype i = Ident LBrace l = perkdeclorfun_list RBrace                                                 { annotate_2_code $loc (Ast.Archetype (i, l)) }
+  | Model i = Ident Colon il = ident_list LBrace l = perkdeforfun_list RBrace                                   { annotate_2_code $loc (Ast.Model (i, il, l)) }
+  | Model i = Ident LBrace l = perkdeforfun_list RBrace                                                         { annotate_2_code $loc (Ast.Model (i, [], l)) }
+  | Fun pf = perkfun                                                                                       { annotate_2_code $loc (Ast.Fundef (pf)) }
   | error                                                                                             { raise (ParseError("top-level definition expected")) }
 
 command:
@@ -110,6 +111,9 @@ command:
   | Do error                                                                                               { raise (ParseError("missing braces after do"))}
   
 
+deforfun:
+  | d = perkdef                                                                                            {annotate_2_code $loc (Ast.DefVar(d))}
+  | Fun d = perkfun                                                                                        {annotate_2_code $loc (Ast.DefFun(d))}
 
 perkdef:
   | Let vd = perkvardesc Assign e = expr                                                                   { (vd, e) }
@@ -117,8 +121,8 @@ perkdef:
   | error { raise (ParseError("definition expected (e.g. let banana : int = 5)")) }
 
 perkfun:
-  | i = Ident LParen id_list = perkvardesc_list RParen Colon rt = perktype LBrace c = command RBrace       { annotate_2_code $loc (Ast.Fundef (rt, i, id_list, c)) }
-  | i = Ident LParen RParen Colon rt = perktype LBrace c = command RBrace                                  { annotate_2_code $loc (Ast.Fundef (rt, i, [], c)) }
+  | i = Ident LParen id_list = perkvardesc_list RParen Colon rt = perktype LBrace c = command RBrace       { (rt, i, id_list, c) }
+  | i = Ident LParen RParen Colon rt = perktype LBrace c = command RBrace                                  { (rt, i, [], c) }
   
 
 perkvardesc:
@@ -126,6 +130,13 @@ perkvardesc:
   | i = Ident Colon                                                                                             { (([], Ast.Infer, []), i) }
   | error { raise (ParseError("variable descriptor expected (e.g. banana : int)")) }
   | Ident error { raise (ParseError("variable descriptor expected (e.g. banana : int)")) }
+
+perkfundesc:
+  | Fun i = Ident Colon t = perktype                                                                       { (t, i) }
+
+declorfun:
+  | d = perkvardesc                                                                                        { annotate_2_code $loc (Ast.DeclVar d) }
+  | f = perkfundesc                                                                                        { annotate_2_code $loc (Ast.DeclFun f) }
 
 expr:
   | e1 = expr LParen args = separated_list(Comma, expr) RParen                                             { annotate_2_code $loc (Ast.Apply (e1, args, None)) }
@@ -247,17 +258,23 @@ perktype_list:
   | error { raise (ParseError("type expected")) }
   | perktype error { raise (ParseError("unexpected type")) }
 
-perkdef_list:
-  | t = perkdef { [t] }
-  | tl = perkdef Comma t = perkdef_list { tl :: t }
+perkdeforfun_list:
+  | t = deforfun { [t] }
+  | tl = deforfun Comma t = perkdeforfun_list { tl :: t }
   | error { raise (ParseError("definition expected")) }
-  | perkdef error { raise (ParseError("unexpected definition")) }
+  | deforfun error { raise (ParseError("unexpected definition")) }
 
 perkvardesc_list:
   | t = perkvardesc { [t] }
   | tl = perkvardesc Comma t = perkvardesc_list { tl :: t }
   | error { raise (ParseError("variable descriptor expected")) }
   | perkvardesc error { raise (ParseError("unexpected variable descriptor")) }
+
+perkdeclorfun_list:
+  | t = declorfun { [t] }
+  | tl = declorfun Comma t = perkdeclorfun_list { tl :: t }
+  | error { raise (ParseError("variable descriptor expected")) }
+  | declorfun error { raise (ParseError("unexpected variable descriptor")) }
 
 spanish_inquisition:
   | error { raise (ParseError("Nobody expects the Spanish Inquisition!")) }

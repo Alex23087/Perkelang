@@ -224,6 +224,17 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
   match ( $ ) tldf with
   | Archetype (i, l) ->
       let _ = add_archetype i in
+      (* Remove discrimination between function declarations and
+      regular variable declarations as they are not relevant here *)
+      let l =
+        List.map
+          (fun t ->
+            match ( $ ) t with
+            (* Add void pointer to declared functions: self *)
+            | DeclFun (t, id) -> (add_parameter_to_func void_pointer t, id)
+            | DeclVar (t, id) -> (t, id))
+          l
+      in
       List.iter
         (fun t ->
           let typ, id = t in
@@ -241,11 +252,10 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
                   (List.map
                      (fun ((a, typ, d), id) ->
                        let typ =
+                         (* Transform declarations into pointers:
+                       at runtime, archetypes are structs of pointers *)
                          match typ with
-                         | Funtype (_, _) ->
-                             add_parameter_to_func void_pointer (a, typ, d)
-                         | Lambdatype (_params, _ret, _free_variables) ->
-                             add_parameter_to_func void_pointer (a, typ, d)
+                         | Funtype (_, _) | Lambdatype (_, _, _) -> (a, typ, d)
                          | _ -> ([], Pointertype (a, typ, d), [])
                        in
                        codegen_decl (typ, id))
@@ -254,7 +264,6 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
            i i);
       ""
   | Model (name, il, defs) ->
-      (* let mems = List.map (fun ((typ, id), _) -> (typ, id)) defs in *)
       let archetypes = List.map (fun n -> (n, get_archetype n)) il in
       let archetype_decls =
         List.map
@@ -262,59 +271,53 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
           archetypes
       in
       let archetype_decls = List.flatten archetype_decls in
-      (* let missing_decl_name = ref ("", "") in
-         let (*theorem: *) has_all_the_right_things =
-           List.for_all
-             (fun (typ, id, arch) ->
-               if List.mem (typ, id) mems then true
-               else (
-                 missing_decl_name := (arch, id);
-                 false))
-             archetype_decls
-         in
-         if not has_all_the_right_things then
-           raise
-             (Type_error
-                ( (( @@ ) tldf).start_pos,
-                  (( @@ ) tldf).end_pos,
-                  Printf.sprintf
-                    "Model %s does not properly implement Archetype %s: missing \
-                     declaration for %s"
-                    name (fst !missing_decl_name) (snd !missing_decl_name) ))
-         else *)
+
+      (* Add self to functions AND ONLY functions (not lambdas) *)
+      let selftype = self_type name in
       let defs =
         List.map
-          (fun ((typ, id), expr) ->
-            let selftype = self_type name in
-            match (typ, ( $ ) expr) with
-            | ( (attrs, Funtype (params, ret), specs),
-                Lambda (lret, lparams, lexpr, []) ) ->
-                let (typ, id), expr =
-                  ( ((attrs, Funtype (selftype :: params, ret), specs), id),
-                    annot_copy expr
-                      (Lambda (lret, (selftype, "self") :: lparams, lexpr, []))
-                  )
-                in
-                ((typ, id), expr)
-            | ( (_attrs, Lambdatype (_params, _ret, _free_vars), _specs),
-                Lambda (_lret, _lparams, _lexpr, __free_vars) ) ->
-                raise_type_error expr "lambdas not yet supported in models"
-            | (_, Funtype (_, _), _), Lambda (_, _, _, _) ->
-                raise_type_error expr
-                  "impossible: free vars should be empty in funtype"
-            | _ -> ((typ, id), expr))
+          (fun def ->
+            match ( $ ) def with
+            | DefFun (typ, id, params, cmd) ->
+                annot_copy def
+                  (DefFun
+                     ( add_parameter_to_func selftype typ,
+                       id,
+                       (selftype, "self") :: params,
+                       cmd ))
+            | DefVar ((typ, id), expr) -> (
+                match (typ, ( $ ) expr) with
+                | ( (_attrs, Lambdatype (_params, _ret, _free_vars), _specs),
+                    Lambda (_lret, _lparams, _lexpr, __free_vars) ) ->
+                    raise_type_error expr "lambdas not yet supported in models"
+                | (_, Funtype (_, _), _), Lambda (_, _, _, _) ->
+                    raise_type_error expr
+                      "impossible: free vars should be empty in funtype"
+                | _ -> annot_copy def (DefVar ((typ, id), expr))))
           defs
       in
+
+      (* Find constructor function *)
       let constructor =
-        List.find_opt (fun ((_, id), _) -> id = "constructor") defs
+        List.find_opt
+          (fun def ->
+            match ( $ ) def with
+            | DefFun (_, id, _, _) -> id = "constructor"
+            | DefVar ((_, id), expr) ->
+                if id = "constructor" then
+                  raise_type_error expr "Constructor cannot be a lambda"
+                else false)
+          defs
+        |> Option.map ( $ ) (* NDR: remove annotation *)
       in
-      let mems = List.map (fun ((typ, id), _) -> (typ, id)) defs in
+
+      (* Generate strings for constructor parameters *)
       let params_str_with_types, params_str, params_typ =
         match constructor with
         | None -> ("", "", [])
-        | Some ((typ, _), _) -> (
+        | Some (DefFun (typ, _, _, _)) -> (
             match typ with
-            | _, Funtype (params, _), _ | _, Lambdatype (params, _, _), _ ->
+            | _, Funtype (params, _), _ ->
                 let params =
                   try List.tl params
                   with Failure _ ->
@@ -332,9 +335,24 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
                     (List.mapi (fun i _ -> Printf.sprintf "arg_%d" i) params),
                   params )
             | _ -> raise (TypeError "Constructor is not a function type"))
+        | _ ->
+            raise_compilation_error tldf
+              "Impossible: constructor is not a function. This should not \
+               happen"
       in
+
+      (* Discard information about function/not-function definition *)
+      let mems =
+        List.map
+          (fun def ->
+            match ( $ ) def with
+            | DefFun (typ, id, _, _) | DefVar ((typ, id), _) -> (typ, id))
+          defs
+      in
+
+      (* Generate member-containing struct *)
       add_code_to_type_binding
-        ([], Modeltype (name, il, List.map fst defs, params_typ), [])
+        ([], Modeltype (name, il, mems, params_typ), [])
         (Printf.sprintf "\n%sstruct %s {\n%s%s\n};\n%stypedef struct %s* %s;\n"
            indent_string name
            (if List.length mems = 0 then ""
@@ -354,6 +372,8 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
                          s s)
                      il))
            indent_string name name);
+
+      (* Generate function to create model *)
       let params_str = if params_str = "" then "" else ", " ^ params_str in
       (* TODO: Add error locations *)
       Printf.sprintf
@@ -370,9 +390,17 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
            ^ String.concat
                (";\n" ^ indent_string ^ "    ")
                (List.map
-                  (fun ((typ, id), expr) ->
-                    Printf.sprintf "self->%s = (%s) %s" id (codegen_type typ)
-                      (codegen_expr expr))
+                  (fun def ->
+                    match ( $ ) def with
+                    | DefFun func ->
+                        (* Synthesize lambda for more homogeneous treatment 👍 *)
+                        let typ, id, _params, _cmd = func in
+                        let lambda = annot_copy def (lambda_of_func func) in
+                        Printf.sprintf "self->%s = (%s) %s" id
+                          (codegen_type typ) (codegen_expr lambda)
+                    | DefVar ((typ, id), expr) ->
+                        Printf.sprintf "self->%s = (%s) %s" id
+                          (codegen_type typ) (codegen_expr expr))
                   defs)
            ^ ";")
         (if List.length archetype_decls == 0 then ""
@@ -426,33 +454,20 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
            ^ ";")
         (match constructor with
         | None -> ""
-        | Some ((constr_type, _constr_id), _constr_expr) -> (
+        | Some (DefFun (constr_type, _id, _params, _expr)) -> (
             match discard_type_aq constr_type with
-            | Lambdatype _ ->
-                raise_type_error tldf "lambda constructor not supported yet."
-                (* (* "(__perkelang_capture_dummy_%s = %s, \
-                   __perkelang_capture_dummy_%s.func(&(__perkelang_capture_dummy_%s.env)%s))" *)
-                let constr_type_desc =
-                  type_descriptor_of_perktype constr_type
-                in
-                Printf.sprintf
-                  "%s    (__perkelang_capture_dummy_%s = self->constructor, \
-                   __perkelang_capture_dummy_%s.func(self, \
-                   &(__perkelang_capture_dummy_%s.env)%s));\n"
-                  indent_string constr_type_desc constr_type_desc
-                  constr_type_desc params_str
-                |> ignore;
-                Printf.sprintf
-                  "%s    CALL_LAMBDA(self->constructor, %s, self%s);\n"
-                  indent_string constr_type_desc params_str *)
             | Funtype _ ->
                 Printf.sprintf "%s    self->constructor(self%s);\n"
                   indent_string params_str
             | _ ->
                 raise_compilation_error tldf
-                  "Impossible: constructor is not a functional type, in \
-                   codegen call. If you see this error, please open an issue \
-                   at https://github.com/Alex23087/Perkelang/issues"))
+                  "Impossible: constructor is not a function, in codegen call. \
+                   If you see this error, please open an issue at \
+                   https://github.com/Alex23087/Perkelang/issues")
+        | _ ->
+            raise_compilation_error tldf
+              "Impossible: constructor is not a function. This should not \
+               happen")
         indent_string
   | InlineC s -> s
   | Fundef (t, id, args, body) -> indent_string ^ codegen_fundef t id args body

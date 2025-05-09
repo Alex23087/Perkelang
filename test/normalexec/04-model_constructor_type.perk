@@ -4,7 +4,7 @@ import "malloc.h"
 extern printf: (char*, ...) -> void
 
 model Test {
-    let constructor: () -> void = (): void => {
+    fun constructor(): void {
         printf("Test constructor\n");
     }
 }
