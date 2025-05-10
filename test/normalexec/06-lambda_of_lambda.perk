@@ -1,8 +1,10 @@
+extern printf: (char*, ...) -> void
+
 fun main (): int {
     let f := (fu: () -> void): void => {
         fu()
     };
 
-    f((): void => {skip});
+    f((): void => {printf("Success!\n")});
     return 0;
 }

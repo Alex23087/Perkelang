@@ -6,14 +6,14 @@ model List {
     let head : int = 0,
     let tail : List? = none,
 
-    let push_head := (x: int) : List => {
+    fun push_head (x: int) : List {
         let newList := summon List();
         newList.head = x;
         newList.tail = self;
         return newList;
     },
 
-    let push_tail := (x: int) : void => {
+    fun push_tail(x: int) : void {
         let newList := summon List();
         newList.head = x;
         let current := self;
@@ -23,7 +23,7 @@ model List {
         current.tail = newList;
     },
 
-    let foreach : ((int) -> void) -> void = (f : (int) -> void) : void => {
+    fun foreach(f : (int) -> void) : void {
         f(self.head);
         if (self.tail?) {
             self.tail!.foreach(f);

@@ -25,7 +25,7 @@ model Test {
 
 fun main (): int {
     let x := summon Test();
-    x.callback = ???;
+    // x.callback = ???;
 
     let fu: () -> void = f;
     fu();
