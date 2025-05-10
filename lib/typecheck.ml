@@ -95,7 +95,13 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
               (Printf.sprintf "Archetype %s is already defined" name)
         | None ->
             List.iter bind_type_if_needed
-              (List.map (fun d -> d |> decl_of_declorfun |> fst) decls);
+              (List.map
+                 (fun d ->
+                   d |> decl_of_declorfun
+                   |> (fun (typ, id) ->
+                   (add_parameter_to_func_only void_pointer typ, id))
+                   |> fst)
+                 decls);
             bind_type_if_needed
               ([], ArcheType (name, List.map decl_of_declorfun decls), []);
             tldf)

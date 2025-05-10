@@ -6,13 +6,22 @@ let rec say_here (_msg : string) : unit =
      flush stdout *)
   ()
 
-(* Utility function to add a parameter (i.e., self) to a type, iff it is a function *)
+(* Utility function to add a parameter (i.e., self) to a type, iff it is a functional *)
 and add_parameter_to_func (param_type : perktype) (func_type : perktype) :
     perktype =
   match func_type with
   | a, Lambdatype (params, ret, free_vars), d ->
       let new_params = param_type :: params in
       (a, Lambdatype (new_params, ret, free_vars), d)
+  | a, Funtype (params, ret), d ->
+      let new_params = param_type :: params in
+      (a, Funtype (new_params, ret), d)
+  | _ -> func_type
+
+(* Utility function to add a parameter (i.e., self) to a type, iff it is a function *)
+and add_parameter_to_func_only (param_type : perktype) (func_type : perktype) :
+    perktype =
+  match func_type with
   | a, Funtype (params, ret), d ->
       let new_params = param_type :: params in
       (a, Funtype (new_params, ret), d)
@@ -111,15 +120,8 @@ and lambda_of_func (func : perkfundef) : expr_t =
 and decl_of_deforfun (def : deforfun_a) : perkdecl =
   match ( $ ) def with
   (* If this def is a function, make its type a function type *)
-  | DefFun (typ, id, _, _) ->
-      let new_typ =
-        match typ with
-        | a, Lambdatype (params, ret, free_vars), d ->
-            if free_vars <> [] then
-              raise_type_error def "function contains free vars"
-            else (a, Funtype (params, ret), d)
-        | _ -> typ
-      in
+  | DefFun (typ, id, params, _) ->
+      let new_typ = ([], Funtype (List.map fst params, typ), []) in
       (new_typ, id)
   (* If this def is a lambda, make its type a lambda type *)
   | DefVar ((typ, id), _) ->
@@ -151,3 +153,7 @@ and decl_of_declorfun (def : declorfun_a) : perkdecl =
         | _ -> typ
       in
       (new_typ, id)
+
+and funtype_of_perkfundef (def : perkfundef) : perktype =
+  let typ, _id, args, _body = def in
+  ([], Funtype (List.map fst args, typ), [])

@@ -315,26 +315,23 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
       let params_str_with_types, params_str, params_typ =
         match constructor with
         | None -> ("", "", [])
-        | Some (DefFun (typ, _, _, _)) -> (
-            match typ with
-            | _, Funtype (params, _), _ ->
-                let params =
-                  try List.tl params
-                  with Failure _ ->
-                    raise_type_error tldf
-                      "constructor has 0 arguments. If you see this error, \
-                       please open an issue at \
-                       https://github.com/Alex23087/Perkelang"
-                in
-                ( String.concat ", "
-                    (List.mapi
-                       (fun (i : int) (t : perktype) ->
-                         Printf.sprintf "%s arg_%d" (codegen_type t) i)
-                       params),
-                  String.concat ", "
-                    (List.mapi (fun i _ -> Printf.sprintf "arg_%d" i) params),
-                  params )
-            | _ -> raise (TypeError "Constructor is not a function type"))
+        | Some (DefFun (_typ, _, params, _)) ->
+            let params =
+              try List.tl params
+              with Failure _ ->
+                raise_type_error tldf
+                  "constructor has 0 arguments. If you see this error, please \
+                   open an issue at https://github.com/Alex23087/Perkelang"
+            in
+            let params = List.map fst params in
+            ( String.concat ", "
+                (List.mapi
+                   (fun (i : int) (t : perktype) ->
+                     Printf.sprintf "%s arg_%d" (codegen_type t) i)
+                   params),
+              String.concat ", "
+                (List.mapi (fun i _ -> Printf.sprintf "arg_%d" i) params),
+              params )
         | _ ->
             raise_compilation_error tldf
               "Impossible: constructor is not a function. This should not \
@@ -342,13 +339,7 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
       in
 
       (* Discard information about function/not-function definition *)
-      let mems =
-        List.map
-          (fun def ->
-            match ( $ ) def with
-            | DefFun (typ, id, _, _) | DefVar ((typ, id), _) -> (typ, id))
-          defs
-      in
+      let mems = List.map decl_of_deforfun defs in
 
       (* Generate member-containing struct *)
       add_code_to_type_binding
@@ -375,7 +366,63 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
 
       (* Generate function to create model *)
       let params_str = if params_str = "" then "" else ", " ^ params_str in
-      (* TODO: Add error locations *)
+      let constructor_call_str =
+        if Option.is_none constructor then ""
+        else
+          Printf.sprintf "%s    self->constructor(self%s);\n" indent_string
+            params_str
+      in
+      (* Generate string containing initialization of the model's members *)
+      let initializers_str =
+        if List.length mems = 0 then ""
+        else
+          indent_string ^ "    "
+          ^ String.concat
+              (";\n" ^ indent_string ^ "    ")
+              (List.map
+                 (fun def ->
+                   match ( $ ) def with
+                   | DefFun func ->
+                       (* Synthesize lambda for more homogeneous treatment 👍 *)
+                       let _typ, id, _params, _cmd = func in
+                       let typ = funtype_of_perkfundef func in
+                       let lambda = annot_copy def (lambda_of_func func) in
+                       Printf.sprintf "self->%s = (%s) %s" id (codegen_type typ)
+                         (codegen_expr lambda)
+                   | DefVar ((typ, id), expr) ->
+                       Printf.sprintf "self->%s = (%s) %s" id (codegen_type typ)
+                         (codegen_expr expr))
+                 defs)
+          ^ ";"
+      in
+      (* Generate string containing initializations of the archetypes substructs *)
+      let archetypes_substruct_str =
+        if List.length archetype_decls == 0 then ""
+        else
+          let archetype_ident_type =
+            List.flatten
+              (List.map
+                 (fun (i, h) ->
+                   Hashtbl.fold (fun k v acc -> (i, k, v) :: acc) h [])
+                 archetypes)
+          in
+          String.concat ";\n"
+            (List.map
+               (fun (a, id, t) ->
+                 match t with
+                 (* Functions don't need to be referenced, as they are already pointers *)
+                 | _a, Funtype _, _q ->
+                     Printf.sprintf "%s    self->%s.%s = (%s) self->%s"
+                       indent_string a id (codegen_type t) id
+                 | _a, Lambdatype (_params, _retype, _free_vars), _q ->
+                     raise_type_error tldf "lambdas not yet supported in models"
+                 | _ ->
+                     Printf.sprintf "%s    self->%s.%s = (%s*) &self->%s"
+                       indent_string a id (codegen_type t) id)
+               archetype_ident_type)
+          ^ ";"
+      in
+      (* Construct the initializer definition using the previously defined strings *)
       Printf.sprintf
         "%s%s %s_init(%s) {\n\
         \    %s%s self = malloc(sizeof(struct %s));\n\
@@ -384,90 +431,7 @@ and codegen_topleveldef (tldf : topleveldef_a) : string =
          %s    %sreturn self;\n\
          }"
         indent_string name name params_str_with_types indent_string name name
-        (if List.length mems = 0 then ""
-         else
-           indent_string ^ "    "
-           ^ String.concat
-               (";\n" ^ indent_string ^ "    ")
-               (List.map
-                  (fun def ->
-                    match ( $ ) def with
-                    | DefFun func ->
-                        (* Synthesize lambda for more homogeneous treatment 👍 *)
-                        let typ, id, _params, _cmd = func in
-                        let lambda = annot_copy def (lambda_of_func func) in
-                        Printf.sprintf "self->%s = (%s) %s" id
-                          (codegen_type typ) (codegen_expr lambda)
-                    | DefVar ((typ, id), expr) ->
-                        Printf.sprintf "self->%s = (%s) %s" id
-                          (codegen_type typ) (codegen_expr expr))
-                  defs)
-           ^ ";")
-        (if List.length archetype_decls == 0 then ""
-         else
-           let archetype_ident_type =
-             List.flatten
-               (List.map
-                  (fun (i, h) ->
-                    Hashtbl.fold (fun k v acc -> (i, k, v) :: acc) h [])
-                  archetypes)
-           in
-           String.concat ";\n"
-             (List.map
-                (fun (a, id, t) ->
-                  match t with
-                  | _a, Lambdatype (_params, _retype, _free_vars), _q ->
-                      raise_type_error tldf
-                        "lambdas not yet supported in models"
-                      (* let arch_funtype =
-                        codegen_type
-                          (add_parameter_to_func void_pointer t
-                          |> add_parameter_to_func void_pointer
-                          |> func_of_lambda)
-                      in
-                      let arch_lamtype =
-                        codegen_type (add_parameter_to_func void_pointer t)
-                      in
-                      let lamtype =
-                        codegen_type (add_parameter_to_func (self_type name) t)
-                      in
-                      (* Printf.sprintf
-                           "%s    self->%s.%s = (__perkelang_capture_dummy_%s = \
-                            self->%s, (%s){__perkelang_capture_dummy_%s.env, \
-                            (%s)__perkelang_capture_dummy_%s.func})"
-                           indent_string a id lamtype id arch_lamtype lamtype
-                         arch_funtype lamtype *)
-                      (* TEMPORARILY EXPAND CAST *)
-                      Printf.sprintf
-                        "%s    self->%s.%s = CAST_LAMBDA(self->%s,\n\
-                         %s        %s,\n\
-                         %s        %s,\n\
-                         %s        %s)"
-                        indent_string a id id indent_string lamtype
-                        indent_string arch_lamtype indent_string arch_funtype *)
-                  | _ ->
-                      Printf.sprintf "%s    self->%s.%s = (%sself->%s"
-                        indent_string a id
-                        (codegen_type t ^ "*) &")
-                        id)
-                archetype_ident_type)
-           ^ ";")
-        (match constructor with
-        | None -> ""
-        | Some (DefFun (constr_type, _id, _params, _expr)) -> (
-            match discard_type_aq constr_type with
-            | Funtype _ ->
-                Printf.sprintf "%s    self->constructor(self%s);\n"
-                  indent_string params_str
-            | _ ->
-                raise_compilation_error tldf
-                  "Impossible: constructor is not a function, in codegen call. \
-                   If you see this error, please open an issue at \
-                   https://github.com/Alex23087/Perkelang/issues")
-        | _ ->
-            raise_compilation_error tldf
-              "Impossible: constructor is not a function. This should not \
-               happen")
+        initializers_str archetypes_substruct_str constructor_call_str
         indent_string
   | InlineC s -> s
   | Fundef (t, id, args, body) -> indent_string ^ codegen_fundef t id args body
