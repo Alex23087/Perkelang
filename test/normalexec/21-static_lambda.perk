@@ -1,0 +1,16 @@
+import "stdio.h"
+
+extern printf: (char*, ...) -> void
+
+fun main (): int {
+    let x: int = 0;
+
+    let printx := (): void => {
+        printf("x = %d\n", 32);
+    };
+
+    x = 2;
+    printx();
+
+    return 0;
+}

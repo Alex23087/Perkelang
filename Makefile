@@ -75,7 +75,7 @@ uninstall:
 test: build
 	@COUNT=$$(ls -1 test/normalexec/*.perk | wc -l) ;\
 	CURRENT=0 ;\
-	IGNORE=(2 3 5 9 18) ;\
+	IGNORE=(3 5 9 18) ;\
 	for f in test/normalexec/*.perk ; \
 	do \
 		CURRENT=$$((CURRENT+1)) ;\

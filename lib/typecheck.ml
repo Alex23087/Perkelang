@@ -99,7 +99,7 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
                  (fun d ->
                    d |> decl_of_declorfun
                    |> (fun (typ, id) ->
-                   (add_parameter_to_func_only void_pointer typ, id))
+                        (add_parameter_to_func_only void_pointer typ, id))
                    |> fst)
                  decls);
             bind_type_if_needed
@@ -931,7 +931,7 @@ and match_types ?(coalesce : bool = false) (expected : perktype)
       | Lambdatype (params1, ret1, free1), Lambdatype (params2, ret2, free2)
         when List.equal
                (* For now, two lambdas have to be capturing the same values *)
-               (fun (typ1, id1) (typ2, id2) ->
+                 (fun (typ1, id1) (typ2, id2) ->
                  id1 = id2 && equal_perktype typ1 typ2)
                free1 free2 ->
           let param_types = List.map2 match_types_aux params1 params2 in
