@@ -8,14 +8,27 @@ fun f (): void {
 }
 
 model Test {
-    let constructor: () -> void = f,
-    let f: () -> void = f
+    let f: () -> void = f,
+
+    fun constructor(): void {
+        printf("Test.constructor()\n");
+    },
+
+    let callback: () => void = (): void {return;},
+
+    let doSomething: () => void = (): void {
+        printf("doSomething()\n");
+        self.callback();
+    }
 }
 
 fun main (): int {
-    // let x := summon Test();
+    let x := summon Test();
+    // x.callback = ???;
 
     let fu: () -> void = f;
     fu();
+
+    x.doSomething();
     return 0;
 }

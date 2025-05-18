@@ -1,0 +1,18 @@
+extern printf: (char*, ...) -> void
+
+model Test {
+    let name: char* = "Test",
+
+    fun f(other: Test) : void {
+        printf("Test this: %s, that: %s\n", self.name, other.name);
+    }
+}
+
+fun main() : int {
+    let x := summon Test();
+    let y := summon Test();
+    y.name = "Y";
+    x.name = "X";
+    x.f(y);
+    return 0;
+}

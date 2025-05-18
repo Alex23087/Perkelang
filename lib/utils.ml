@@ -1,17 +1,29 @@
 open Ast
+open Errors
+
+let static_compilation : bool = false
 
 let rec say_here (_msg : string) : unit =
   (* Printf.printf "%s\n" _msg;
      flush stdout *)
   ()
 
-(* Utility function to add a parameter (i.e., self) to a type, iff it is a function *)
+(* Utility function to add a parameter (i.e., self) to a type, iff it is a functional *)
 and add_parameter_to_func (param_type : perktype) (func_type : perktype) :
     perktype =
   match func_type with
   | a, Lambdatype (params, ret, free_vars), d ->
       let new_params = param_type :: params in
       (a, Lambdatype (new_params, ret, free_vars), d)
+  | a, Funtype (params, ret), d ->
+      let new_params = param_type :: params in
+      (a, Funtype (new_params, ret), d)
+  | _ -> func_type
+
+(* Utility function to add a parameter (i.e., self) to a type, iff it is a function *)
+and add_parameter_to_func_only (param_type : perktype) (func_type : perktype) :
+    perktype =
+  match func_type with
   | a, Funtype (params, ret), d ->
       let new_params = param_type :: params in
       (a, Funtype (new_params, ret), d)
@@ -42,10 +54,10 @@ and func_of_lambda_void (t : perktype) : perktype =
         q )
   | _ -> failwith "func_of_lambda_void: not a lambda type"
 
-and func_of_lambda (t : perktype) : perktype =
+and functype_of_lambdatype (t : perktype) : perktype =
   match t with
   | a, Lambdatype (args, ret, _), q -> (a, Funtype (args, ret), q)
-  | _ -> failwith "func_of_lambda: not a lambda type"
+  | _ -> failwith "functype_of_lambdatype: not a lambda type"
 
 and lambdatype_of_func (typ : perktype) : perktype =
   match typ with
@@ -102,3 +114,60 @@ and lambda_def_of_func_def_ (def : perkdef) : perkdef =
 and discard_type_aq (typ : perktype) : perktype_partial =
   let _a, t, _q = typ in
   t
+
+and lambda_of_func (func : perkfundef) : expr_t =
+  let typ, _id, args, body = func in
+  Lambda (typ, args, body, [])
+
+and decl_of_deforfun (def : deforfun_a) : perkdecl =
+  match ( $ ) def with
+  (* If this def is a function, make its type a function type *)
+  | DefFun (typ, id, params, _) ->
+      let new_typ = ([], Funtype (List.map fst params, typ), []) in
+      (new_typ, id)
+  (* If this def is a lambda, make its type a lambda type *)
+  | DefVar ((typ, id), _) ->
+      (* let new_typ =
+        match typ with
+        | a, Funtype (params, ret), d -> (a, Lambdatype (params, ret, []), d)
+        | _ -> typ
+      in *)
+      (typ, id)
+
+and decl_of_declorfun (def : declorfun_a) : perkdecl =
+  match ( $ ) def with
+  (* If this def is a function, make its type a function type *)
+  | DeclFun (typ, id) ->
+      let new_typ =
+        match typ with
+        | a, Lambdatype (params, ret, free_vars), d ->
+            if free_vars <> [] then
+              raise_type_error def "function contains free vars"
+            else (a, Funtype (params, ret), d)
+        | _ -> typ
+      in
+      (new_typ, id)
+  (* If this def is a lambda, make its type a lambda type *)
+  | DeclVar (typ, id) ->
+      (* let new_typ =
+        match typ with
+        | a, Funtype (params, ret), d -> (a, Lambdatype (params, ret, []), d)
+        | _ -> typ
+      in *)
+      (typ, id)
+
+and funtype_of_perkfundef (def : perkfundef) : perktype =
+  let typ, _id, args, _body = def in
+  ([], Funtype (List.map fst args, typ), [])
+
+and get_member_functions (defs : deforfun_a list) : perkident list =
+  List.filter
+    (fun def ->
+      match ( $ ) def with
+      | DefFun (_, _, _, _) -> true
+      | DefVar ((_, _), _) -> false)
+    defs
+  |> List.map (fun f ->
+         match ( $ ) f with
+         | DefFun (_, id, _, _) -> id
+         | _ -> failwith "impossible: vars have been already filtered away")

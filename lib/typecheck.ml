@@ -67,11 +67,7 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
       if id = "self" then raise_type_error tldf "Identifier self is reserved"
       else
         let funtype =
-          ( [],
-            Funtype
-              ( List.map (fun (typ, _) -> typ |> lambdatype_of_func) params,
-                ret_type ),
-            [] )
+          ([], Funtype (List.map (fun (typ, _) -> typ) params, ret_type), [])
         in
         bind_var id funtype;
         bind_type_if_needed funtype;
@@ -98,15 +94,17 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
             raise_type_error tldf
               (Printf.sprintf "Archetype %s is already defined" name)
         | None ->
-            let decls =
-              List.map (fun (typ, id) -> (typ |> lambdatype_of_func, id)) decls
-            in
             List.iter bind_type_if_needed
               (List.map
-                 (fun d -> d |> fst |> add_parameter_to_func void_pointer)
+                 (fun d ->
+                   d |> decl_of_declorfun
+                   |> (fun (typ, id) ->
+                   (add_parameter_to_func_only void_pointer typ, id))
+                   |> fst)
                  decls);
-            bind_type_if_needed ([], ArcheType (name, decls), []);
-            annot_copy tldf (Archetype (name, decls)))
+            bind_type_if_needed
+              ([], ArcheType (name, List.map decl_of_declorfun decls), []);
+            tldf)
   | Model (ident, archetypes, fields) ->
       (if ident = "self" then
          raise_type_error tldf "Identifier self is reserved"
@@ -118,6 +116,7 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
              raise_type_error tldf
                (Printf.sprintf "Model %s is already defined" ident)
          | None -> ());
+
       (* Get implemented archetypes *)
       let archetypes_t =
         List.map
@@ -137,6 +136,7 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
                      "Model %s implements non-existent Archetype %s" ident a))
           archetypes
       in
+
       (* Get all the fields that the model is required to implement *)
       let required_fields =
         List.flatten
@@ -151,33 +151,20 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
                       before")
              archetypes_t)
       in
-      (* Transform all functions into lambdas *)
-      (* let fields =
-           List.map
-             (fun f -> lambda_def_of_func_def_with_self f (self_type ident))
-             fields
-         in *)
-      let fields = List.map (fun f -> lambda_def_of_func_def f) fields in
-      (* let fields =
-           List.map
-             (fun ((typ, id), expr) -> ((lambdatype_of_func typ, id), expr))
-             fields
-         in *)
+
       (* Check that all the required fields are defined *)
       List.iter
         (fun ((typ, id), arch) ->
           match
             List.exists
-              (fun ((t, i), e) ->
+              (fun def ->
+                let t, i = decl_of_deforfun def in
                 if id = i then
                   let _ =
                     try
-                      (* match_types t
-                         (typ |> lambdatype_of_func
-                         |> add_parameter_to_func void_pointer) *)
                       match_types t typ
                       (* TODO: Check very carefully: Should it be t typ or typ t? *)
-                    with Type_match_error msg -> raise_type_error e msg
+                    with Type_match_error msg -> raise_type_error def msg
                   in
                   true
                 else false)
@@ -191,75 +178,111 @@ and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
                     in archetype %s"
                    ident id arch (show_perktype typ)))
         required_fields;
+
+      (* Gather member functions *)
+      let member_funcs = get_member_functions fields in
+
       (* Get constructor, if exists *)
       push_symbol_table ();
       bind_var "self"
-        ([], Modeltype (ident, archetypes, List.map fst fields, []), []);
+        ( [],
+          Modeltype
+            ( ident,
+              archetypes,
+              List.map (fun d -> d |> decl_of_deforfun) fields,
+              [],
+              member_funcs ),
+          [] );
       let constr =
-        List.find_opt (fun ((_typ, id), _expr) -> id = "constructor") fields
+        List.find_opt
+          (fun def ->
+            match ( $ ) def with
+            | DefFun (_, id, _, _) -> id = "constructor"
+            | DefVar ((_, id), expr) ->
+                if id = "constructor" then
+                  raise_type_error expr "Constructor must be a function"
+                else false)
+          fields
       in
       let constr_params =
-        match constr with
-        | Some (((_, Funtype (params, ret), _), _), _)
-        | Some (((_, Lambdatype (params, ret, _), _), _), _) ->
+        match Option.map ( $ ) constr with
+        | Some (DefFun (ret, _, params, _)) ->
             (* Check that constructor returns void *)
             let _ =
               try match_types ([], Basetype "void", []) ret
               with Type_match_error msg -> raise_type_error tldf msg
             in
-            params
-        | Some (((_, Infer, _), _), expr) -> (
-            let _expr_res, (_, expr_type, _) = typecheck_expr expr in
-            match expr_type with
-            (* TODO: LAMBDA transform this *)
-            | Lambdatype (params, ret, _) ->
-                let _ =
-                  try match_types ([], Basetype "void", []) ret
-                  with Type_match_error msg -> raise_type_error tldf msg
-                in
-                params
-            | _ -> raise_type_error expr "constructor should be a lambda 1")
-        | Some (_, def) ->
-            raise_type_error def "constructor should be a lambda 2"
-            (* This error should go on the type, not on the definition. But for now, types are not annotated *)
+            List.map fst params
+        | Some _ ->
+            raise_type_error (Option.get constr)
+              "Constructor must be a function 2"
         | None -> []
       in
       pop_symbol_table ();
+
       (* Check that all the fields defined in the model are well-typed *)
       push_symbol_table ();
       (* !!!!!WARNING!!!!! THIS CANNOT BE DONE LIKE THAT. MUST BE CHECKED AS FOR PROGRAM FOR HOISTED FUNCTIONS !!!!!WARNING!!!!! *)
       (* TODO: For some reason, you can write things like member[0] instead of self.member[0]. Investigate *)
       let temp_model_type =
         ( [],
-          Modeltype (ident, archetypes, List.map fst fields, constr_params),
+          Modeltype
+            ( ident,
+              archetypes,
+              List.map decl_of_deforfun fields,
+              constr_params,
+              member_funcs ),
           [] )
       in
       bind_type_if_needed temp_model_type;
       bind_var "self" temp_model_type;
       let fields_res =
         List.map
-          (fun ((typ, id), expr) ->
-            let expr_res, expr_type = typecheck_expr expr in
-            let expr_res, expr_type = fill_nothing expr_res expr_type typ in
-            let typ' =
-              try match_types typ expr_type
-              with Type_match_error msg -> raise_type_error expr msg
-            in
-            bind_var id typ';
-            ((typ', id), expr_res))
+          (fun def ->
+            match ( $ ) def with
+            | DefFun (ret, id, params, body) ->
+                push_symbol_table ();
+                List.iter
+                  (fun (typ, id) ->
+                    try bind_var id typ
+                    with Double_declaration msg -> raise_type_error def msg)
+                  params;
+                let body_res = typecheck_command ~retype:(Some ret) body in
+                pop_symbol_table ();
+                annot_copy def (DefFun (ret, id, params, body_res))
+            | DefVar ((typ, id), expr) ->
+                let expr_res, expr_type = typecheck_expr expr in
+                let expr_res, expr_type = fill_nothing expr_res expr_type typ in
+                let typ' =
+                  try match_types typ expr_type
+                  with Type_match_error msg -> raise_type_error expr msg
+                in
+                bind_var id typ';
+                annot_copy def (DefVar ((typ', id), expr_res)))
           fields
       in
       pop_symbol_table ();
       (* Add model to the symbol table *)
       let modeltype =
         ( [],
-          Modeltype (ident, archetypes, List.map fst fields_res, constr_params),
+          Modeltype
+            ( ident,
+              archetypes,
+              List.map decl_of_deforfun fields_res,
+              constr_params,
+              member_funcs ),
           [] )
       in
       rebind_type (type_descriptor_of_perktype modeltype) modeltype;
       List.iter
-        (fun ((typ, _id), _expr) ->
-          typ |> add_parameter_to_func modeltype |> bind_type_if_needed)
+        (fun def ->
+          match ( $ ) def with
+          | DefFun (typ, _, params, _) ->
+              (* Generate type binding for functions. Need to add virtual self to the parameters *)
+              ([], Funtype (List.map fst params, typ), [])
+              |> add_parameter_to_func modeltype
+              |> bind_type_if_needed
+          | DefVar ((typ, _), _) -> bind_type_if_needed typ)
         fields_res;
       annot_copy tldf (Model (ident, archetypes, fields_res))
 
@@ -449,7 +472,6 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
             (param_types, ret_type, Some fun_type)
         | _ -> raise_type_error func "Function type expected"
       in
-      let fun_param_types = List.map lambdatype_of_func fun_param_types in
       let param_rets =
         try typecheck_expr_list params fun_param_types
         with Invalid_argument _ ->
@@ -537,10 +559,6 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
       (annot_copy expr (PreUnop (op, expr_res)), res_type)
   | Lambda (retype, params, body, _) ->
       push_symbol_table ();
-      (* TODO: Function parameters need to be lambdas *)
-      let params =
-        List.map (fun (t, id) -> (lambdatype_of_func t, id)) params
-      in
       List.iter
         (fun (typ, id) ->
           try bind_var id typ
@@ -557,10 +575,22 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
                 raise_type_error expr (Printf.sprintf "Unbound variable %s" v))
           free_vars
       in
+      (* if a lambda has no free variables, it is made into a function *)
       let lamtype =
-        ( [],
-          Lambdatype (List.map (fun (typ, _) -> typ) params, retype, free_vars),
-          [] )
+        match free_vars with
+        | [] ->
+            if static_compilation then
+              ([], Funtype (List.map (fun (typ, _) -> typ) params, retype), [])
+            else
+              ( [],
+                Lambdatype
+                  (List.map (fun (typ, _) -> typ) params, retype, free_vars),
+                [] )
+        | _ ->
+            ( [],
+              Lambdatype
+                (List.map (fun (typ, _) -> typ) params, retype, free_vars),
+              [] )
       in
       pop_symbol_table ();
       bind_type_if_needed lamtype;
@@ -582,7 +612,9 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
         | _, t -> (op, t)
       in
       (annot_copy expr (PostUnop (op, expr_res)), res_type)
-  | Parenthesised e -> let (e1, typ) = typecheck_expr ~expected_return e in (annot_copy expr (Parenthesised e1), typ)
+  | Parenthesised e ->
+      let e1, typ = typecheck_expr ~expected_return e in
+      (annot_copy expr (Parenthesised e1), typ)
   | Subscript (container, accessor) -> (
       let container_res, container_type = typecheck_expr container in
       let accessor_res, accessor_type = typecheck_expr accessor in
@@ -613,8 +645,10 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
   | Summon (typeid, params) -> (
       let typ = lookup_type typeid in
       match typ with
-      | Some (attrs, Modeltype (_name, archetypes, fields, constr_params), specs)
-        ->
+      | Some
+          ( attrs,
+            Modeltype (_name, archetypes, fields, constr_params, member_funcs),
+            specs ) ->
           let param_rets = List.map typecheck_expr params in
           say_here
             (Printf.sprintf "Summon: %s\n" (show_perktype (Option.get typ))
@@ -645,8 +679,9 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
             with Type_match_error msg -> raise_type_error expr msg
           in
           ( annot_copy expr (Summon (typeid, List.map fst param_rets)),
-            (attrs, Modeltype (typeid, archetypes, fields, constr_params), specs)
-          )
+            ( attrs,
+              Modeltype (typeid, archetypes, fields, constr_params, member_funcs),
+              specs ) )
       | Some _ ->
           raise_type_error expr
             (Printf.sprintf "Can only summon model types. %s is not a model."
@@ -657,7 +692,9 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
       let expr_res, expr_type = typecheck_expr expr in
       let res_type, access_type, rightype =
         match resolve_type expr_type with
-        | _, Modeltype (name, _archetypes, fields, _constr_params), _ -> (
+        | ( _,
+            Modeltype (name, _archetypes, fields, _constr_params, _member_funcs),
+            _ ) -> (
             let field = List.find_opt (fun (_, id) -> id = ide) fields in
             match field with
             | Some (typ, _) -> (typ, Some expr_type, Some typ)
@@ -717,7 +754,7 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
       match typ with
       | Some t -> (
           match t with
-          | _, Modeltype (_name, archetypes, _fields, _constr_params), _ ->
+          | _, Modeltype (_name, archetypes, _fields, _constr_params, _), _ ->
               let archs_idents =
                 List.map
                   (fun a ->
@@ -769,9 +806,9 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
           in
           bind_type_if_needed arraytype;
           (annot_copy expr (Array (xexpr :: exprs_e)), arraytype))
-  | Cast (t, e) -> 
-    bind_type_if_needed (snd t);
-    (annot_copy expr (Cast (t, fst (typecheck_expr e))), snd t)
+  | Cast (t, e) ->
+      bind_type_if_needed (snd t);
+      (annot_copy expr (Cast (t, fst (typecheck_expr e))), snd t)
   | IfThenElseExpr (guard, then_e, else_e) ->
       let guard_res, guard_type =
         typecheck_expr ~expected_return:(Some bool_type) guard
@@ -872,12 +909,14 @@ and match_types ?(coalesce : bool = false) (expected : perktype)
               decls1 decls2
           in
           ([], ArcheType (name1, decls_types), [])
-      | ( Modeltype (name1, archetypes1, decls1, constr_params1),
-          Modeltype (name2, archetypes2, decls2, constr_params2) )
+      | ( Modeltype (name1, archetypes1, decls1, constr_params1, member_funcs1),
+          Modeltype (name2, archetypes2, decls2, constr_params2, member_funcs2)
+        )
         when name1 = name2
              && List.length archetypes1 = List.length archetypes2
              && List.length decls1 = List.length decls2
-             && List.length constr_params1 = List.length constr_params2 ->
+             && List.length constr_params1 = List.length constr_params2
+             && List.equal String.equal member_funcs1 member_funcs2 ->
           let decls_types =
             List.map2
               (fun (t1, id1) (t2, id2) ->
@@ -893,7 +932,10 @@ and match_types ?(coalesce : bool = false) (expected : perktype)
           let constr_types =
             List.map2 match_types_aux constr_params1 constr_params2
           in
-          ([], Modeltype (name1, archetypes1, decls_types, constr_types), [])
+          ( [],
+            Modeltype
+              (name1, archetypes1, decls_types, constr_types, member_funcs1),
+            [] )
       | Vararg, Vararg -> actual
       | Infer, _ | _, Infer -> actual
       | Optiontype t, Optiontype s -> ([], Optiontype (match_types_aux t s), [])
@@ -909,16 +951,11 @@ and match_types ?(coalesce : bool = false) (expected : perktype)
           let param_types = List.map2 match_types_aux params1 params2 in
           let ret_type = match_types_aux ret1 ret2 in
           ([], Lambdatype (param_types, ret_type, []), [])
-      | Lambdatype (params1, ret1, free1), Lambdatype (params2, ret2, free2)
-        when List.equal
-               (* For now, two lambdas have to be capturing the same values *)
-                 (fun (typ1, id1) (typ2, id2) ->
-                 id1 = id2 && equal_perktype typ1 typ2)
-               free1 free2 ->
+      | Lambdatype (params1, ret1, free1), Lambdatype (params2, ret2, _) ->
           let param_types = List.map2 match_types_aux params1 params2 in
           let ret_type = match_types_aux ret1 ret2 in
           ([], Lambdatype (param_types, ret_type, free1), [])
-      | Pointertype (_, Basetype "void", _), Modeltype (_, _, _, _) -> actual
+      | Pointertype (_, Basetype "void", _), Modeltype _ -> actual
       | _ ->
           raise
             (Type_match_error

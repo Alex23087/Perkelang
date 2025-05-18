@@ -9,7 +9,7 @@ archetype Drawable {
 model Panano : Drawable {
     let pinselo := 17,
     
-    let constructor := (x: int) : void => {
+    fun constructor(x: int) : void {
         self.pinselo = x;
     }
 }
@@ -18,7 +18,7 @@ model List {
     let head : <Drawable>? = nothing,
     let tail : List? = none,
 
-    let push_head := (x: <Drawable>) : List => {
+    fun push_head(x: <Drawable>) : List {
         if (!self.head?){
             self.head = some x;
             return self;
@@ -30,7 +30,7 @@ model List {
         }
     },
 
-    let push_tail := (x: <Drawable>) : void => {
+    fun push_tail(x: <Drawable>) : void {
         if (!self.head?){
             self.head = some x;
         }else{
@@ -44,7 +44,7 @@ model List {
         }
     },
 
-    let foreach : ((<Drawable>) -> void) -> void = (f : (<Drawable>) -> void) : void => {
+    fun foreach(f : (<Drawable>) => void) : void {
         if (self.head?) {   
             // printf ("QUAUA%d\n", self.head!.pinselo);
             f(self.head!);
@@ -74,7 +74,7 @@ fun main () : int {
     // panano = summon Panano(8);
     // l.push_tail(panano ~> Drawable);
     
-    let printx := (x: <Drawable>) : void => {
+    let printx := (x: <Drawable>) : void {
         printf("QUAUA%d\n", x.pinselo);
     };
 

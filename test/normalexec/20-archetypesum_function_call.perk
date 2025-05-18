@@ -1,0 +1,18 @@
+extern printf: (char*, ...) -> void
+
+archetype Printer {
+    fun print : (int) -> void
+}
+
+model Panano : Printer {
+    fun print(x: int) : void {
+        printf("Panano %d\n", x);
+    }
+}
+
+fun main() : int {
+    let panano := summon Panano();
+    panano.print(1);
+    banish panano;
+    return 0;
+}

@@ -3,7 +3,7 @@ function compile() {
     clear
     pkill perkc
     # make debug_run
-    make install
+    # make install
     make test
 }
 
