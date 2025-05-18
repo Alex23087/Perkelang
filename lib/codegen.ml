@@ -652,11 +652,11 @@ and codegen_expr (e : expr_a) : string =
               let args_str =
                 if List.length args = 0 then "" else ", " ^ args_str
               in
-              match acctype with
+              match Option.map resolve_type acctype with
               | Some (_, Modeltype _, _) ->
                   Printf.sprintf "%s(%s%s)" expr_str e1_str args_str
               | Some _t ->
-                  Printf.sprintf "%s(%s%s)" expr_str e1_str
+                  Printf.sprintf "%s(%s.self%s)" expr_str e1_str
                     args_str (* this is for archetype sums *)
               | None ->
                   raise_compilation_error e "Impossible: no acctype for access"
