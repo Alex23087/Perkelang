@@ -1,0 +1,24 @@
+import "stdio.h"
+
+extern printf: (char*, ...) -> void
+
+fun main (): int {
+    let x: int = 0;
+    let y: int = 0;
+
+    let f := (): void => {
+        printf("%d\n", x);
+    };
+
+    let g := (): void => {
+        printf("%d\n", y);
+    };
+
+    f = g;
+
+    f = (): void => {
+        printf("%d %d\n", x, y);
+    };
+
+    f();
+}

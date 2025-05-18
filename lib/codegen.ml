@@ -51,6 +51,7 @@ let add_import (lib : string) : unit =
   if not (List.mem lib !import_list) then import_list := lib :: !import_list
 
 let lambda_environments : (string * string) list ref = ref []
+let lambda_typedefs : string list ref = ref []
 let lambda_capture_dummies : (string * string) list ref = ref []
 
 let rec codegen_lambda (e : expr_a) : string =
@@ -91,8 +92,8 @@ let rec codegen_lambda (e : expr_a) : string =
                 else
                   "\n"
                   ^ (let envtype =
-                       (* TODO: This type descriptor will have to be changed *)
-                       type_descriptor_of_environment free_variables
+                       type_descriptor_of_environment ~erase_env:false
+                         free_variables
                      in
                      Printf.sprintf "    %s* _env = (%s*) __env;\n" envtype
                        envtype)
@@ -860,11 +861,11 @@ and generate_types () =
     compare (List.length d_a) (List.length d_b)
   in
   ft_list := List.sort sort_based_on_deps_count !ft_list;
-  (* List.iter
-     (fun (id, (_, _, deps)) ->
-       Printf.printf "Type: %s, Dependencies: [%s]\n" id
-         (String.concat ", " deps))
-     !ft_list; *)
+  List.iter
+    (fun (id, (_, _, deps)) ->
+      Printf.printf "Type: %s, Dependencies: [%s]\n" id
+        (String.concat ", " deps))
+    !ft_list;
   while List.length !ft_list > 0 do
     (* say_here "generate_types"; *)
     let _id, (_typ, _code, _deps) = List.hd !ft_list in
@@ -884,7 +885,7 @@ and generate_types () =
              (_i, (_typ, _code, List.filter (fun id -> id <> _id) _deps)))
            !ft_list);
     match _code with
-    | Some c -> out := Printf.sprintf "%s%s\n" !out c
+    | Some c -> out := if c = "" then !out else Printf.sprintf "%s%s\n" !out c
     | None -> ()
   done;
   !out
@@ -984,14 +985,18 @@ and codegen_type_definition (t : perktype) : string =
 
 (* TODO, change these when relambding *)
 
-and codegen_lambda_environment (free_vars : perkvardesc list) : string * string
-    =
-  let environment_type_desc = type_descriptor_of_environment free_vars in
+and codegen_lambda_environment (free_vars : perkvardesc list) :
+    bool * string * string =
+  let environment_type_desc, environment_type_desc_erased =
+    ( type_descriptor_of_environment ~erase_env:false free_vars,
+      type_descriptor_of_environment ~erase_env:true free_vars )
+  in
+  Printf.printf "Environment type: %s\n" environment_type_desc;
   let tmp_typedef =
     List.find_opt (fun (t, _) -> t = environment_type_desc) !lambda_environments
   in
   match tmp_typedef with
-  | Some typedef -> (fst typedef, "")
+  | Some _typedef -> (false, environment_type_desc_erased, "")
   | None ->
       let environment_typedef =
         Printf.sprintf "typedef struct %s {%s;} %s;" environment_type_desc
@@ -1004,42 +1009,51 @@ and codegen_lambda_environment (free_vars : perkvardesc list) : string * string
       in
       lambda_environments :=
         (environment_type_desc, environment_typedef) :: !lambda_environments;
-      (environment_type_desc, environment_typedef)
+      (true, environment_type_desc_erased, environment_typedef)
 
 and codegen_lambda_capture (lamtype : perktype) : string =
   match lamtype with
-  | [], Lambdatype (_retype, _args, free_vars), [] -> (
+  | _, Lambdatype (_retype, _args, free_vars), _ ->
       let lambda_type_desc =
         type_descriptor_of_perktype (func_of_lambda_void lamtype)
       in
-      let environment_type_desc, environment_typedef =
+      let needs_generation, environment_type_desc, environment_typedef =
         codegen_lambda_environment free_vars
       in
-      let capture_type_desc = lambda_type_desc ^ "_" ^ environment_type_desc in
-      let tmp_typedef =
-        List.find_opt
-          (fun (t, _) -> t = capture_type_desc)
-          !lambda_capture_dummies
-      in
-      match tmp_typedef with
-      | Some str -> snd str
-      | None ->
-          let typedef =
-            Printf.sprintf
-              "struct %s {\n\
-              \    struct %s env;\n\
-              \    %s func;\n\
-               };\n\
-               typedef struct %s* %s" capture_type_desc environment_type_desc
-              lambda_type_desc capture_type_desc capture_type_desc
-          in
-          let alltogether =
-            Printf.sprintf "%s\n%s;" environment_typedef typedef
-          in
-          (* Printf.printf "%s\n\n\n\n\n\n" alltogether; *)
-          lambda_capture_dummies :=
-            (capture_type_desc, alltogether) :: !lambda_capture_dummies;
-          alltogether)
+      if needs_generation then
+        let capture_type_desc =
+          lambda_type_desc ^ "_" ^ environment_type_desc
+        in
+        let tmp_typedef =
+          List.find_opt
+            (fun (t, _) -> t = capture_type_desc)
+            !lambda_capture_dummies
+        in
+        match tmp_typedef with
+        | Some str -> snd str
+        | None ->
+            let typedef =
+              Printf.sprintf
+                "struct %s {\n\
+                \    void* env;\n\
+                \    %s func;\n\
+                 };\n\
+                 typedef struct %s* %s"
+                capture_type_desc lambda_type_desc capture_type_desc
+                capture_type_desc
+            in
+            let alltogether =
+              Printf.sprintf "%s%s" environment_typedef
+                (if List.mem environment_type_desc !lambda_typedefs then ""
+                 else (
+                   lambda_typedefs := environment_type_desc :: !lambda_typedefs;
+                   "\n" ^ typedef ^ ";"))
+            in
+            (* Printf.printf "%s\n\n\n\n\n\n" alltogether; *)
+            (* lambda_capture_dummies :=
+            (capture_type_desc, alltogether) :: !lambda_capture_dummies; *)
+            alltogether
+      else ""
   | _ ->
       failwith
         "Impossible: codegen_lambda_capture: not a lambda expression. If you \
