@@ -167,7 +167,7 @@ and codegen_program (tldfs : topleveldef_a list) : string =
         (List.map (fun lib -> Printf.sprintf "#include %s" lib) !import_list)
     ^ "\n\n"
     (* Write macros *)
-    ^ "typedef struct env_ {} env_;\n"
+    (* ^ "typedef struct env_ {} env_;\n" *)
     ^ "typedef struct _lambdummy_type {\n\
       \    void *env;\n\
       \    void *func;\n\
@@ -180,7 +180,8 @@ and codegen_program (tldfs : topleveldef_a list) : string =
       \    memcpy(ptr->env, env, size);\n\
       \    ptr->func = labmda;\n\
       \    return ptr;\n\
-       }" ^ "\n\n"
+       }"
+    ^ "\n\n"
     ^ "#define CALL_LAMBDA0(l, t) (__lambdummy = (__lambdummy_type *)l, \
        ((t)(__lambdummy->func))())\n\
        #define CALL_LAMBDA(l, t, ...) (__lambdummy = (__lambdummy_type \
@@ -655,7 +656,7 @@ and codegen_expr (e : expr_a) : string =
               | Some (_, Modeltype _, _) ->
                   Printf.sprintf "%s(%s%s)" expr_str e1_str args_str
               | Some _t ->
-                  Printf.sprintf "%s(%s.self%s)" expr_str e1_str
+                  Printf.sprintf "%s(%s%s)" expr_str e1_str
                     args_str (* this is for archetype sums *)
               | None ->
                   raise_compilation_error e "Impossible: no acctype for access"
@@ -870,11 +871,11 @@ and generate_types () =
     compare (List.length d_a) (List.length d_b)
   in
   ft_list := List.sort sort_based_on_deps_count !ft_list;
-  List.iter
+  (* List.iter
     (fun (id, (_, _, deps)) ->
       Printf.printf "Type: %s, Dependencies: [%s]\n" id
         (String.concat ", " deps))
-    !ft_list;
+    !ft_list; *)
   while List.length !ft_list > 0 do
     (* say_here "generate_types"; *)
     let _id, (_typ, _code, _deps) = List.hd !ft_list in
@@ -1000,7 +1001,7 @@ and codegen_lambda_environment (free_vars : perkvardesc list) :
     ( type_descriptor_of_environment ~erase_env:false free_vars,
       type_descriptor_of_environment ~erase_env:true free_vars )
   in
-  Printf.printf "Environment type: %s\n" environment_type_desc;
+  say_here (Printf.sprintf "Environment type: %s\n" environment_type_desc);
   let tmp_typedef =
     List.find_opt (fun (t, _) -> t = environment_type_desc) !lambda_environments
   in
@@ -1013,7 +1014,7 @@ and codegen_lambda_environment (free_vars : perkvardesc list) :
              (List.mapi
                 (fun i (typ, _id) ->
                   let typ =
-                    match typ with
+                    match resolve_type typ with
                     (* | _, ArcheType (name, _), _ -> name *)
                     | _, Modeltype _, _ -> "void*"
                     | _ -> type_descriptor_of_perktype typ
