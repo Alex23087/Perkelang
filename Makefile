@@ -75,7 +75,7 @@ uninstall:
 test: build
 	@COUNT=$$(ls -1 test/normalexec/*.perk | wc -l) ;\
 	CURRENT=0 ;\
-	IGNORE=(5 9 18) ;\
+	IGNORE=(9 18) ;\
 	for f in test/normalexec/*.perk ; \
 	do \
 		CURRENT=$$((CURRENT+1)) ;\
@@ -92,8 +92,8 @@ test: build
 			if [ -e "$$EXPECTED" ]; then \
 				echo "$$RES" | diff "$$EXPECTED" -;\
 				if [ $$? -eq 0 ]; then \
-					rm -f "$${f%.*}.c" ;\
-					# :\
+					# rm -f "$${f%.*}.c" ;\
+					:\
 				else \
 					echo "Test Failed";\
 				fi ;\

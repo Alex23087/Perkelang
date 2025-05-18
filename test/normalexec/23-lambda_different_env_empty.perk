@@ -17,7 +17,7 @@ fun main (): int {
     f = g;
 
     f = (): void {
-        printf("%d %d\n", x, y);
+        printf("%d %d\n", 32, 32);
     };
 
     f();

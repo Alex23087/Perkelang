@@ -54,7 +54,13 @@ type perktype_partial =
   | Arraytype of perktype * int option
   | Structtype of string
   | ArcheType of perkident * perkdecl list
-  | Modeltype of perkident * perkident list * perkdecl list * perktype list
+  | Modeltype of
+      perkident
+      * perkident list
+      * perkdecl list
+      * perktype list
+      * perkident list
+    (* name, archetypes, fields, constructor_params, member functions*)
   | Optiontype of perktype
   | Tupletype of perktype list
   | ArchetypeSum of perktype list

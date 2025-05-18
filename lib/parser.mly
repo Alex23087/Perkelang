@@ -29,7 +29,7 @@
 %left Comma
 %nonassoc Lt Leq Gt Geq
 %nonassoc Eq
-%left Arrow             /* For Bigarrow in lambda expressions */
+%left Arrow
 %left Plus Minus
 %left Star Div As
 %right PlusPlus MinusMinus Bang Ampersand
@@ -143,8 +143,8 @@ expr:
   | e1 = expr b = binop e2 = expr                                                                          { annotate_2_code $loc (Ast.Binop (b, e1, e2)) }
   | u = preunop e = expr                                                                                   { annotate_2_code $loc (Ast.PreUnop (u, e)) }
   | e = expr u = postunop %prec POSTFIX                                                                    { annotate_2_code $loc (Ast.PostUnop (u, e)) }
-  | LParen id_list = perkvardesc_list RParen Colon ret = perktype Bigarrow LBrace c = command RBrace       { annotate_2_code $loc (Ast.Lambda (ret, id_list, c, [])) }
-  | LParen RParen Colon ret = perktype Bigarrow LBrace c = command RBrace                                  { annotate_2_code $loc (Ast.Lambda (ret, [], c, [])) }
+  | LParen id_list = perkvardesc_list RParen Colon ret = perktype LBrace c = command RBrace                { annotate_2_code $loc (Ast.Lambda (ret, id_list, c, [])) }
+  | LParen RParen Colon ret = perktype LBrace c = command RBrace                                           { annotate_2_code $loc (Ast.Lambda (ret, [], c, [])) }
   | b = Boolean                                                                                            { annotate_2_code $loc (Ast.Bool (b)) }
   | n = Integer                                                                                            { annotate_2_code $loc (Ast.Int (n)) }
   | f = Float                                                                                              { annotate_2_code $loc (Ast.Float (f)) }
@@ -188,11 +188,18 @@ expr:
   | LParen RParen Arrow t = perktype                                                                       { Ast.Funtype ([], t) }
   | LParen tl = perktype_list RParen Arrow tf = perktype                                                   { Ast.Funtype (tl, tf) }
 
+%inline perklamtype:
+  | t1 = perktype Bigarrow t2 = perktype                                                                      { Ast.Lambdatype ([t1], t2, []) }
+  | LParen RParen Bigarrow t = perktype                                                                       { Ast.Lambdatype ([], t, []) }
+  | LParen tl = perktype_list RParen Bigarrow tf = perktype                                                   { Ast.Lambdatype (tl, tf, []) }
+
 perktype:
   | t = perktype_partial q = list(perktype_qualifier)                                                      { ([], t, q) }
   | a = nonempty_list(perktype_attribute) t = perktype_partial q = list(perktype_qualifier)                { (a, t, q) }
   | t = perkfuntype q = list(perktype_qualifier)                                                           { ([], t, q) }
   | a = nonempty_list(perktype_attribute) t = perkfuntype q = list(perktype_qualifier)                     { (a, t, q) }
+  | t = perklamtype q = list(perktype_qualifier)                                                           { ([], t, q) }
+  | a = nonempty_list(perktype_attribute) t = perklamtype q = list(perktype_qualifier)                     { (a, t, q) }
   | LParen t = perktype RParen                                                                             { t }
   | Ellipsis                                                                                               { ([], Ast.Vararg, []) }
   | error                                                                                                  { raise (ParseError("type expected")) }

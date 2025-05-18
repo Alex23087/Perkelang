@@ -44,7 +44,7 @@ model List {
         }
     },
 
-    fun foreach(f : (<Drawable>) -> void) : void {
+    fun foreach(f : (<Drawable>) => void) : void {
         if (self.head?) {   
             // printf ("QUAUA%d\n", self.head!.pinselo);
             f(self.head!);
@@ -74,7 +74,7 @@ fun main () : int {
     // panano = summon Panano(8);
     // l.push_tail(panano ~> Drawable);
     
-    let printx := (x: <Drawable>) : void => {
+    let printx := (x: <Drawable>) : void {
         printf("QUAUA%d\n", x.pinselo);
     };
 

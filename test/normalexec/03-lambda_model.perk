@@ -11,7 +11,7 @@ fun main (): int {
     let x := summon XContainer();
     x.x = 0;
 
-    let printx := (): void => {
+    let printx := (): void {
         printf("x = %d\n", x.x);
     };
 

@@ -1,6 +1,8 @@
 open Ast
 open Errors
 
+let static_compilation : bool = false
+
 let rec say_here (_msg : string) : unit =
   (* Printf.printf "%s\n" _msg;
      flush stdout *)
@@ -125,12 +127,12 @@ and decl_of_deforfun (def : deforfun_a) : perkdecl =
       (new_typ, id)
   (* If this def is a lambda, make its type a lambda type *)
   | DefVar ((typ, id), _) ->
-      let new_typ =
+      (* let new_typ =
         match typ with
         | a, Funtype (params, ret), d -> (a, Lambdatype (params, ret, []), d)
         | _ -> typ
-      in
-      (new_typ, id)
+      in *)
+      (typ, id)
 
 and decl_of_declorfun (def : declorfun_a) : perkdecl =
   match ( $ ) def with
@@ -147,13 +149,25 @@ and decl_of_declorfun (def : declorfun_a) : perkdecl =
       (new_typ, id)
   (* If this def is a lambda, make its type a lambda type *)
   | DeclVar (typ, id) ->
-      let new_typ =
+      (* let new_typ =
         match typ with
         | a, Funtype (params, ret), d -> (a, Lambdatype (params, ret, []), d)
         | _ -> typ
-      in
-      (new_typ, id)
+      in *)
+      (typ, id)
 
 and funtype_of_perkfundef (def : perkfundef) : perktype =
   let typ, _id, args, _body = def in
   ([], Funtype (List.map fst args, typ), [])
+
+and get_member_functions (defs : deforfun_a list) : perkident list =
+  List.filter
+    (fun def ->
+      match ( $ ) def with
+      | DefFun (_, _, _, _) -> true
+      | DefVar ((_, _), _) -> false)
+    defs
+  |> List.map (fun f ->
+         match ( $ ) f with
+         | DefFun (_, id, _, _) -> id
+         | _ -> failwith "impossible: vars have been already filtered away")

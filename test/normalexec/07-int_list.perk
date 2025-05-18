@@ -23,7 +23,7 @@ model List {
         current.tail = newList;
     },
 
-    fun foreach(f : (int) -> void) : void {
+    fun foreach(f : (int) => void) : void {
         f(self.head);
         if (self.tail?) {
             self.tail!.foreach(f);
@@ -43,7 +43,7 @@ fun main () : int {
     l.push_tail(8);
     l.push_tail(9);
 
-    let printx := (x: int) : void => {
+    let printx := (x: int) : void {
         printf("%d\n", x);
     };
 

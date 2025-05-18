@@ -5,7 +5,7 @@ extern printf: (char*, ...) -> void
 fun main (): int {
     let x: int = 0;
 
-    let printx := (): void => {
+    let printx := (): void {
         printf("x = %d\n", x);
     };
 

@@ -117,7 +117,8 @@ let resolve_type (typ : perktype) : perktype =
                       ts ([], lst)
                   in
                   ((a, ArchetypeSum ts_t, q), ts_l)
-              | Modeltype (name, archetypes, decls, constr_params) ->
+              | Modeltype (name, archetypes, decls, constr_params, member_funcs)
+                ->
                   let lst = typ :: lst in
                   let decls_t, decls_l =
                     List.fold_right
@@ -128,7 +129,10 @@ let resolve_type (typ : perktype) : perktype =
                         ((res_t, ide) :: acc, res_l))
                       decls ([], lst)
                   in
-                  ( (a, Modeltype (name, archetypes, decls_t, constr_params), q),
+                  ( ( a,
+                      Modeltype
+                        (name, archetypes, decls_t, constr_params, member_funcs),
+                      q ),
                     decls_l )
               | Optiontype t ->
                   let lst = typ :: lst in
@@ -173,7 +177,7 @@ let rec type_descriptor_of_perktype ?(erase_env = true) (t : perktype) : string
       Printf.sprintf "l_%s_to_%s_r" args_str (type_descriptor_of_perktype ret)
   | Lambdatype (_args, _ret, free_vars) ->
       let lambda_type_desc =
-        type_descriptor_of_perktype (func_of_lambda_void ([], t, []))
+        type_descriptor_of_perktype (functype_of_lambdatype ([], t, []))
       in
       let environment_type_desc =
         type_descriptor_of_environment ~erase_env free_vars
@@ -191,7 +195,7 @@ let rec type_descriptor_of_perktype ?(erase_env = true) (t : perktype) : string
   | ArcheType (name, _decls) -> name
   | ArchetypeSum archs ->
       "Sum" ^ String.concat "Plus" (List.map type_descriptor_of_perktype archs)
-  | Modeltype (name, _archs, _decls, _constr_params) -> name
+  | Modeltype (name, _archs, _decls, _constr_params, _member_funcs) -> name
   | Optiontype t -> Printf.sprintf "%s_opt" (type_descriptor_of_perktype t)
   | Infer ->
       raise
@@ -311,7 +315,8 @@ let dependencies_of_type (typ : perktype) : perkident list =
                 in
                 let underlying_deps, underlying_l =
                   dependencies_of_type_aux ~voidize:true
-                    (func_of_lambda_void typ) lst
+                    (functype_of_lambdatype typ)
+                    lst
                 in
                 ( (type_descriptor_of_perktype typ :: params_t)
                   @ ret_t @ underlying_deps,
@@ -341,12 +346,13 @@ let dependencies_of_type (typ : perktype) : perkident list =
                     (res_t @ acc, res_l))
                   ([ type_descriptor_of_perktype typ ], lst)
                   ts
-            | Modeltype (name, archetypes, decls, constr_params) ->
+            | Modeltype (name, archetypes, decls, constr_params, _) ->
                 let lst = typ :: lst in
                 if voidize then ([], lst)
                 else
                   let decls =
                     List.map
+                      (* TODO: Check very carefully *)
                       (fun (typ, id) ->
                         match typ with
                         | _a, Lambdatype (_params, _ret, _), _d ->
@@ -431,7 +437,7 @@ let rec bind_type_if_needed (typ : perktype) =
               (* TODO: LAMBDA pass env to function *)
               bind_type typ';
               (* Bind the type of the underlying function *)
-              bind_type_if_needed (func_of_lambda_void typ);
+              bind_type_if_needed (functype_of_lambdatype typ);
               (* Bind the parameters and return type of the lambda *)
               List.iter bind_type_if_needed _params;
               bind_type_if_needed _ret
@@ -445,7 +451,10 @@ let rec bind_type_if_needed (typ : perktype) =
           | _, ArchetypeSum _ts, _ ->
               bind_type typ';
               List.iter bind_type_if_needed _ts
-          | _, Modeltype (_name, _archetypes, _decls, _constr_params), _ ->
+          | ( _,
+              Modeltype
+                (_name, _archetypes, _decls, _constr_params, _member_funcs),
+              _ ) ->
               bind_type typ'
               (* ; List.iter (fun (typ, _id) -> bind_type_if_needed typ) decls;
                  List.iter (fun typ -> bind_type_if_needed typ) constr_params *)
