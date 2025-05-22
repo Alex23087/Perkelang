@@ -1,0 +1,240 @@
+import "stdio.h"
+import "stdlib.h"
+import "ctype.h"
+import "string.h"
+
+extern printf : (char*, ...) -> int
+extern atoi : char* -> int
+extern strcmp : (char*, char*) -> int
+extern exit : int -> void
+extern isspace : char -> int
+extern isdigit : char -> int
+extern strlen : char* -> int
+extern malloc : int -> void*
+extern strcpy : (char*, char*) -> void
+extern free : void* -> void
+extern puts : char* -> void
+
+
+model TokenStack {
+    let val := ("END", 0),
+    let next : TokenStack? = nothing,
+
+    fun constructor (tok : (char* * int)) : void {
+        self.val = tok;
+    },
+
+    fun push (tok : (char* * int)) : void {        
+        let new_elem := summon TokenStack(tok);
+        let last_elem := self;
+
+        while(last_elem.next?){
+            last_elem = last_elem.next!;
+        };
+
+        last_elem.next = new_elem;
+    },
+
+    fun pop () : (char* * int) {
+        
+
+        let last_elem := self;
+        let new_last_elem := self;
+
+        while(last_elem.next?){
+            new_last_elem = last_elem;
+            last_elem = last_elem.next!;
+        };
+        
+        new_last_elem.next = nothing;
+
+        // buggaroni here, type inference does not infer
+        let res : (char* * int) = last_elem.val;
+
+        if(cast(int, cast(void*, last_elem) != cast(void*, self))){
+            banish last_elem;
+        };
+        
+        return res
+    },
+
+    fun print() : void {
+        let cur_elem : TokenStack = self;
+
+        while(cur_elem.next?){
+            let val : (char* * int) = cur_elem.val;
+            printf("%s\t%d\n", val[0], val[1]);
+            cur_elem = cur_elem.next!;
+        };
+        let val : (char* * int) = cur_elem.val;
+        printf("%s\t%d\n", val[0], val[1]);
+    }
+}
+
+// failure with message
+fun failwith (msg : char*) : void {
+    printf ("Failure: %s\n", msg);
+    exit(1);
+}
+
+// curried equality function
+fun streq (s1 : char*) : char* => int {
+    return (s2 : char*) : int {return (strcmp (s1, s2) == 0)}
+}
+
+// curried get index
+fun str_get_index (s : char*) : int => char {
+    let len := strlen(s);
+    return (i : int) : char {
+        if(i >= len) {
+            failwith ("Tried to get out of bounds string index")
+        };
+
+        let c : char = cast(char, 0);
+        let _s := s;
+        BEGIN_C
+        c = _s[i];
+        END_C;
+        return c
+    }
+}
+
+fun substring (str : char*, start : int, end : int) : char* {
+
+    let len : int = strlen(str);
+
+    if (start > end || start > len || end > len) {
+        failwith ("Invalid substring range");
+    };
+
+    let sublen : int = end - start;
+    let sub : char* = cast(char*, malloc(sublen + 1));
+    
+    BEGIN_C
+    if (!sub) {
+        failwith("Malloc Failed");
+    }
+
+    memcpy(sub, str + start, sublen);
+    sub[sublen] = '\0';
+    END_C;
+
+    return sub;
+}
+
+// recognizes arithmetical operators
+fun lex_ar_operator(s : char*) : ((char*) * int) {
+    let eq := streq (s);
+
+    if(eq("+")){return ("Plus", 0)};
+    if(eq("*")){return ("Times", 0)};
+    if(eq("/")){return ("Div", 0)};
+    if(eq("-")){return ("Minus", 0)};
+    
+    failwith("Unrecognized arithmetical operator");
+}
+
+fun parse_int(s : char*) : ((char*) * int) {
+    return ("Num", atoi(s))
+}
+
+fun reverse_string (s : char*) : char* {
+    let len := strlen (s);
+    let r : char* = cast(char*, malloc(len + 1));
+    BEGIN_C
+    if (!r) return NULL;
+    for (size_t i = 0; i < len; ++i) {
+        r[i] = s[len - 1 - i];
+    }
+    r[len] = '\0';
+    END_C;
+    return r;
+}
+
+fun tokenize_arithmetic (s : char*) : void* {  // UGH! This cannot return TokenStack!
+    s = reverse_string(s);
+    let stack := summon TokenStack (("END", 0));
+    let len := strlen (s);
+    let get := str_get_index (s);
+
+    let cur_word_start := 0;
+    let cur_word_end := 0;
+
+    let i := 0;
+    for (i = 0; i < len; i++){
+        let c := get(i);
+
+        if ((isspace(c)) && cur_word_start != cur_word_end) {
+            let sub_1 := substring(s, cur_word_start, cur_word_end);
+            let sub := reverse_string(sub_1);
+            let tok := ("", 0);
+            if(isdigit(get(cur_word_start))){
+                tok = parse_int(sub);
+            } else {
+                tok = lex_ar_operator(sub);
+            };
+            stack.push(tok);
+            free(cast(void*, sub));
+            free(cast(void*, sub_1));
+        };
+
+        if(isspace(c)){
+            cur_word_end = i+1;
+            cur_word_start = cur_word_end 
+        } else{
+            cur_word_end = i+1;
+        }
+    };
+    free(cast(void*, s));
+    return stack;
+}
+
+fun execute_computation (stack_vp : void*) : (void* * int){
+    let stack := cast (TokenStack, stack_vp);
+    let done := streq("END");
+    let tok := stack.pop();
+    if (!done(tok[0])) {
+        let eq := streq (tok[0]);
+        if (eq("Num")) {
+            return (cast(void*, stack), tok[1]);
+        } else {
+            let op := tok[0];
+            
+        };
+
+        let res1 := execute_computation (cast(void*, stack));
+        let res2 := execute_computation (res1[0]);
+        
+        if(eq("Plus")) {
+            return (cast(void*, stack), res1[1] + res2[1])
+        };
+        if(eq("Times")) {
+            return (cast(void*, stack), res1[1] * res2[1])
+        };
+        if(eq("Div")) {
+            if (res2[1] == 0){
+                failwith ("Attempted division by zero!");
+            };
+            return (cast(void*, stack), res1[1] / res2[1])
+        };
+        if(eq("Minus")) {
+            return (cast(void*, stack), res1[1] - res2[1])
+        }
+    };
+
+    failwith ("Computation reached end of stack.")
+}
+
+fun main () : int {
+    let str : char* = " * 4 / 10 5 ";
+
+    let toks := cast (TokenStack, tokenize_arithmetic(str));
+
+    toks.print();
+
+    let res := execute_computation(cast(void*, toks));
+    
+    printf("%d\n", res[1]);
+
+    return 0;
+ }
