@@ -931,6 +931,7 @@ and codegen_type_definition (t : perktype) : string =
               key
               (match u with
               | _, Modeltype _, _ -> "void*"
+              | _, Pointertype typ, _ -> (type_descriptor_of_perktype typ)^"*" (* TODO REMOVE THIS HORRIBLE FIX *)
               | _ -> type_descriptor_of_perktype u)
               key
           in
