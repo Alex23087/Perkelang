@@ -113,6 +113,7 @@ let rec token lexbuf =
   | "=>" | "⇒" -> Bigarrow
   | "true" -> Boolean true
   | "false" -> Boolean false
+  | "of" -> Of
   | identifier -> Ident (Sedlexing.Latin1.lexeme lexbuf)
   | "0x", hex_number -> Integer (int_of_string (Sedlexing.Latin1.lexeme lexbuf))
   | "0b", Plus ('0' | '1') ->

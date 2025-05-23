@@ -503,6 +503,7 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
             (* Two int or two float expressions, no cast to be done *)
             | _, (_al, Basetype "int", _ql), _, (_ar, Basetype "int", _qr)
             | _, (_al, Basetype "float", _ql), _, (_ar, Basetype "float", _qr)
+            | _, (_al, Basetype "int64_t", _ql), _, (_ar, Basetype "int64_t", _qr)
               ->
                 (lhs_res, lhs_type, rhs_res, rhs_type)
             (* int op float, cast first one to float *)
@@ -517,6 +518,21 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
                   lhs_type,
                   annot_copy rhs_res (Cast ((rhs_type, lhs_type), rhs_res)),
                   lhs_type )
+            
+            (* int64 op int, cast second one to int64 *)
+            | _, (_al, Basetype "int64_t", _ql), _, (_ar, Basetype "int", _qr) ->
+                    ( lhs_res,
+                      lhs_type,
+                      annot_copy rhs_res (Cast ((rhs_type, lhs_type), rhs_res)),
+                      lhs_type )
+
+            (* int op int64, cast first one to int64 *)
+            | _, (_al, Basetype "int", _ql), _, (_ar, Basetype "int64_t", _qr) ->
+                ( annot_copy lhs_res (Cast ((lhs_type, rhs_type), lhs_res)),
+                  rhs_type,
+                  rhs_res,
+                  rhs_type )
+                  
             | _, (_a, Basetype "float", _q), _, _
             | _, (_a, Basetype "int", _q), _, _ ->
                 raise_type_error rhs "Numerical type expected"
@@ -787,7 +803,7 @@ and typecheck_expr ?(expected_return : perktype option = None) (expr : expr_a) :
   | Something (e, _) ->
       let e_res, e_type = typecheck_expr e in
       (annot_copy expr (Something (e_res, e_type)), ([], Optiontype e_type, []))
-  | Nothing _ -> (expr, ([], Infer, []))
+  | Nothing typ -> (expr, (typ)) (* this used to be infer by default, but added "of" syntax *)
   | Array exprs -> (
       match exprs with
       | [] -> (expr, ([], Infer, []))

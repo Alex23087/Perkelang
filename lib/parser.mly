@@ -22,7 +22,7 @@
 %token <string> InlineC
 %token Import Open
 %token Archetype Model Summon Banish Cast
-%token Nothing Something
+%token Nothing Something Of
 
 /* Precedence and associativity specification */
 %left Semicolon
@@ -157,6 +157,7 @@ expr:
   | Summon i = Ident LParen RParen                                                                         { annotate_2_code $loc (Summon (i, [])) }
   | e1 = expr Dot i = Ident                                                                                { annotate_2_code $loc (Ast.Access (e1, i, None, None)) }
   | Nothing                                                                                                { annotate_2_code $loc (Ast.Nothing ([], Ast.Infer, [])) }
+  | Nothing Of t=perktype                                                                                  { annotate_2_code $loc (Ast.Nothing (t)) }
   | Something e = expr                                                                                     { annotate_2_code $loc (Ast.Something (e, ([], Ast.Infer, []))) }
   | LParen RParen                                                                                          { annotate_2_code $loc (Ast.Tuple ([], None)) }
   | LParen e = expr_list RParen                                                                            { annotate_2_code $loc (Ast.Tuple (e, None)) }
