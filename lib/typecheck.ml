@@ -35,7 +35,7 @@ and typecheck_deferred_function (tldf : topleveldef_a) : topleveldef_a =
 
 and typecheck_topleveldef (tldf : topleveldef_a) : topleveldef_a =
   match ( $ ) tldf with
-  | Import _ -> tldf
+  | Import libname -> print_endline (C_symbols.string_of_symbols (C_symbols.get_lib_symbols libname)); tldf
   | InlineC _ -> tldf
   | Def (((typ, id), expr), _) ->
       if id = "self" then raise_type_error tldf "Identifier self is reserved"

@@ -9,6 +9,7 @@ exception Type_match_error of string
 exception Double_declaration of string
 exception Undeclared of string
 exception Not_inferred of string
+exception CParsingError of string
 
 let raise_type_error (node : 'a annotated) (msg : string) =
   raise (Type_error ((( @@ ) node).start_pos, (( @@ ) node).end_pos, msg))
