@@ -1,4 +1,6 @@
 _build
+_opam
+
 test/*.out
 test/*.ast
 test/test.c
@@ -7,3 +9,4 @@ test/normalexec/**/*.c
 
 perkelang-vscode-lsp/node_modules
 perkelang-vscode-lsp/out
+node_modules
