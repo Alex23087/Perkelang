@@ -14,5 +14,5 @@ fun main(): void {
     let str := ctr.str;
     banish test;
 
-    printf(str)
+    printf("%s", str)
 }

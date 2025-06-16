@@ -1,4 +1,5 @@
 PREFIX ?= /usr/local/perkelang
+SHELL := /usr/bin/env bash
 
 # .PHONY: compile
 # compile:

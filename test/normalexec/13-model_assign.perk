@@ -7,6 +7,6 @@ model Test {
 fun main(): void {
     let test := summon Test();
     test.str = "Hello, Universe!";
-    printf(test.str);
+    printf("%s", test.str);
     banish test;
 }

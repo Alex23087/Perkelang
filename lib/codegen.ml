@@ -740,7 +740,7 @@ and codegen_expr (e : expr_a) : string =
       match op with
       | OptionGet (Some t) ->
           Printf.sprintf "((%s)%s%s)"
-            (type_descriptor_of_perktype t)
+            (c_type_of_perktype t)
             (codegen_expr e) (codegen_postunop op)
       | OptionGet None -> raise_type_error e "Option get type was not inferred"
       | _ -> Printf.sprintf "%s%s" (codegen_expr e) (codegen_postunop op))
@@ -801,7 +801,7 @@ and codegen_expr (e : expr_a) : string =
             (codegen_expr e)
       | _ ->
           Printf.sprintf "((%s)(%s))"
-            (type_descriptor_of_perktype to_t)
+            (c_type_of_perktype to_t)
             (codegen_expr e))
   | IfThenElseExpr (guard, then_e, else_e) ->
       Printf.sprintf "(%s ? %s : %s)" (codegen_expr guard) (codegen_expr then_e)
@@ -857,16 +857,18 @@ and codegen_fundecl (id : perkident) (typ : perktype) : string =
   in
   if attrs_str = "" then type_str else Printf.sprintf "%s %s" attrs_str type_str
 
+
 and generate_types () =
   let out = ref "" in
   let ft_list =
     ref
       (Hashtbl.fold
          (fun k (typ, code) acc ->
-           if List.mem (k, (typ, code)) builtin_types then acc
+           if is_builtin_type k (typ, code) then acc
            else (k, (typ, code, dependencies_of_type typ)) :: acc)
          type_symbol_table [])
   in
+
   let sort_based_on_deps_count (_, (_, _, d_a)) (_, (_, _, d_b)) =
     compare (List.length d_a) (List.length d_b)
   in
@@ -976,11 +978,11 @@ and codegen_type_definition (t : perktype) : string =
             match n with
             | Some n ->
                 Printf.sprintf "typedef %s %s[%d];"
-                  (type_descriptor_of_perktype at)
+                  (c_type_of_perktype at)
                   key n
             | None ->
                 Printf.sprintf "typedef %s %s[];"
-                  (type_descriptor_of_perktype at)
+                  (c_type_of_perktype at)
                   key
           in
           Hashtbl.replace type_symbol_table key (_t, Some compiled);
@@ -1018,7 +1020,7 @@ and codegen_lambda_environment (free_vars : perkvardesc list) :
                     match resolve_type typ with
                     (* | _, ArcheType (name, _), _ -> name *)
                     | _, Modeltype _, _ -> "void*"
-                    | _ -> type_descriptor_of_perktype typ
+                    | _ -> c_type_of_perktype typ
                   in
                   Printf.sprintf "%s _%d" typ i)
                 free_vars))

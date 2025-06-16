@@ -9,5 +9,5 @@ fun main(): void {
     let str := test.str;
     banish test;
 
-    printf(str)
+    printf("%s", str)
 }

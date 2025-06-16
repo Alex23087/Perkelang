@@ -12,7 +12,7 @@ fun main(): void {
     let test := summon Test();
     let ctr := (test as StringContainer);
     ctr.str = "Hello, Universe!";
-    printf(test.str);
-    printf(ctr.str);
+    printf("%s", test.str);
+    printf("%s", ctr.str);
     banish test;
 }
