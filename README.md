@@ -2,6 +2,16 @@
 
 Perk is a modern low level programming language, compiled to C. It builds on C's simplicity, adding features such as option types, lambdas and typeclasses. Its current goal is to replace C in the implementation of the MellOS operating system.
 
+---
+
+## Run Perk with nix
+
+```bash
+nix run github:Alex23087/Perk -- [files]
+```
+
+This will build the `perkc` compiler and run it directly (you can pass any arguments after `--`).
+
 ## Features
 
 - Simple **type inference**
