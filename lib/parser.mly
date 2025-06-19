@@ -76,11 +76,29 @@ topleveldef:
   | Extern id = Ident Colon t = perktype                                                                   { annotate_2_code $loc (Ast.Extern (id, t)) }
   | ic = InlineC                                                                                           { annotate_2_code $loc (Ast.InlineC(ic)) }
   | d = perkdef                                                                                            { annotate_2_code $loc (Ast.Def (d, None)) }
-  | Archetype i = Ident LBrace l = perkdeclorfun_list RBrace                                                 { annotate_2_code $loc (Ast.Archetype (i, l)) }
-  | Model i = Ident Colon il = ident_list LBrace l = perkdeforfun_list RBrace                                   { annotate_2_code $loc (Ast.Model (i, il, l)) }
-  | Model i = Ident LBrace l = perkdeforfun_list RBrace                                                         { annotate_2_code $loc (Ast.Model (i, [], l)) }
+  | Archetype i = Ident LBrace l = perkdeclorfun_list RBrace                                               { annotate_2_code $loc (Ast.Archetype (i, l)) }
+  | Model i = Ident Colon il = ident_list LBrace l = perkdeforfun_list RBrace                              { annotate_2_code $loc (Ast.Model (i, il, l)) }
+  | Model i = Ident LBrace l = perkdeforfun_list RBrace                                                    { annotate_2_code $loc (Ast.Model (i, [], l)) }
   | Fun pf = perkfun                                                                                       { annotate_2_code $loc (Ast.Fundef (pf)) }
-  | error                                                                                             { raise (ParseError("top-level definition expected")) }
+  | error                                                                                                  { raise (ParseError("top-level definition expected")) }
+  | Import error                                                                                           { raise (ParseError("string expected after import")) }
+  | Open error                                                                                             { raise (ParseError("string expected after open")) }
+  | Extern error                                                                                           { raise (ParseError("identifier expected after extern")) }
+  | Extern id = Ident error                                                                                { raise (ParseError("missing colon after extern " ^ id)) }
+  | Extern id = Ident Colon error                                                                          { raise (ParseError("missing type declaration after extern " ^ id ^ " :")) }
+  | Archetype error                                                                                        { raise (ParseError("identifier expected after archetype")) }
+  | Archetype id = Ident error                                                                             { raise (ParseError("missing opening brace after archetype " ^ id)) }
+  | Archetype id = Ident LBrace error                                                                      { raise (ParseError("invalid declaration list in archetype " ^ id)) }
+  | Archetype id = Ident LBrace perkdeclorfun_list error                                                   { raise (ParseError("missing closing brace in archetype " ^ id)) }
+  | Model error                                                                                            { raise (ParseError("identifier expected after model")) }
+  | Model id = Ident error                                                                                 { raise (ParseError("missing colon or opening brace after model " ^ id)) }
+  | Model id = Ident Colon error                                                                           { raise (ParseError("invalid identifier list after model " ^ id ^ " :")) }
+  | Model id = Ident Colon  ident_list error                                                               { raise (ParseError("missing opening brace after model " ^ id ^ " inheritance list")) }
+  | Model id = Ident Colon  ident_list LBrace error                                                        { raise (ParseError("invalid definition list in model " ^ id)) }
+  | Model id = Ident Colon  ident_list LBrace perkdeforfun_list error                                      { raise (ParseError("missing closing brace in model " ^ id)) }
+  | Model id = Ident LBrace error                                                                          { raise (ParseError("invalid definition list in model " ^ id)) }
+  | Model id = Ident LBrace perkdeforfun_list error                                                        { raise (ParseError("missing closing brace in model " ^ id)) }
+  | Fun error                                                                                              { raise (ParseError("invalid function definition after fun")) }
 
 command:
   | ic = InlineC                                                                                           { annotate_2_code $loc (Ast.InlineCCmd(ic)) }
